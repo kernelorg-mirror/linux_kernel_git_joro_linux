@@ -3184,7 +3184,9 @@ domains_done:
 		if (ret)
 			goto free_iommu;
 
-		iommu_enable_translation(iommu);
+		if (!translation_pre_enabled(iommu))
+			iommu_enable_translation(iommu);
+
 		iommu_disable_protect_mem_regions(iommu);
 	}
 
