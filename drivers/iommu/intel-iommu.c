@@ -2284,10 +2284,10 @@ dmar_search_domain_by_dev_info(int segment, int bus, int devfn)
 	return NULL;
 }
 
-static struct dmar_domain *dmar_insert_dev_info(struct intel_iommu *iommu,
-						int bus, int devfn,
-						struct device *dev,
-						struct dmar_domain *domain)
+static struct dmar_domain *dmar_insert_one_dev_info(struct intel_iommu *iommu,
+						    int bus, int devfn,
+						    struct device *dev,
+						    struct dmar_domain *domain)
 {
 	struct dmar_domain *found = NULL;
 	struct device_domain_info *info;
@@ -2394,8 +2394,8 @@ static struct dmar_domain *get_domain_for_dev(struct device *dev, int gaw)
 
 	/* register PCI DMA alias device */
 	if (dev_is_pci(dev)) {
-		tmp = dmar_insert_dev_info(iommu, PCI_BUS_NUM(dma_alias),
-					   dma_alias & 0xff, NULL, domain);
+		tmp = dmar_insert_one_dev_info(iommu, PCI_BUS_NUM(dma_alias),
+					       dma_alias & 0xff, NULL, domain);
 
 		if (!tmp || tmp != domain) {
 			domain_exit(domain);
@@ -2407,7 +2407,7 @@ static struct dmar_domain *get_domain_for_dev(struct device *dev, int gaw)
 	}
 
 found_domain:
-	tmp = dmar_insert_dev_info(iommu, bus, devfn, dev, domain);
+	tmp = dmar_insert_one_dev_info(iommu, bus, devfn, dev, domain);
 
 	if (!tmp || tmp != domain) {
 		domain_exit(domain);
@@ -2596,7 +2596,7 @@ static int domain_add_dev_info(struct dmar_domain *domain, struct device *dev)
 	if (!iommu)
 		return -ENODEV;
 
-	ndomain = dmar_insert_dev_info(iommu, bus, devfn, dev, domain);
+	ndomain = dmar_insert_one_dev_info(iommu, bus, devfn, dev, domain);
 	if (ndomain != domain)
 		return -EBUSY;
 
