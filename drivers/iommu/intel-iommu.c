@@ -1829,9 +1829,9 @@ static inline int guestwidth_to_adjustwidth(int gaw)
 	return agaw;
 }
 
-static int domain_init(struct dmar_domain *domain, int guest_width)
+static int domain_init(struct dmar_domain *domain, struct intel_iommu *iommu,
+		       int guest_width)
 {
-	struct intel_iommu *iommu;
 	int adjust_width, agaw;
 	unsigned long sagaw;
 
@@ -1840,7 +1840,6 @@ static int domain_init(struct dmar_domain *domain, int guest_width)
 	domain_reserve_special_ranges(domain);
 
 	/* calculate AGAW */
-	iommu = domain_get_iommu(domain);
 	if (guest_width > cap_mgaw(iommu->cap))
 		guest_width = cap_mgaw(iommu->cap);
 	domain->gaw = guest_width;
@@ -2387,7 +2386,7 @@ static struct dmar_domain *get_domain_for_dev(struct device *dev, int gaw)
 		return NULL;
 	}
 	domain_attach_iommu(domain, iommu);
-	if (domain_init(domain, gaw)) {
+	if (domain_init(domain, iommu, gaw)) {
 		domain_exit(domain);
 		return NULL;
 	}
