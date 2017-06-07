@@ -1831,21 +1831,6 @@ static inline bool queue_ring_full(struct flush_queue *queue)
 #define queue_ring_for_each(i, q) \
 	for (i = (q)->head; i != (q)->tail; i = (i + 1) % FLUSH_QUEUE_SIZE)
 
-static void queue_release(struct dma_ops_domain *dom,
-			  struct flush_queue *queue)
-{
-	unsigned i;
-
-	assert_spin_locked(&queue->lock);
-
-	queue_ring_for_each(i, queue)
-		free_iova_fast(&dom->iovad,
-			       queue->entries[i].iova_pfn,
-			       queue->entries[i].pages);
-
-	queue->head = queue->tail = 0;
-}
-
 static inline unsigned queue_ring_add(struct flush_queue *queue)
 {
 	unsigned idx = queue->tail;
@@ -1901,7 +1886,7 @@ static void queue_add(struct dma_ops_domain *dom,
 
 	if (queue_ring_full(queue)) {
 		dma_ops_domain_flush_tlb(dom);
-		queue_release(dom, queue);
+		queue_ring_free_flushed(dom, queue);
 	}
 
 	idx = queue_ring_add(queue);
