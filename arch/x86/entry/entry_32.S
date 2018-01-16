@@ -222,6 +222,47 @@
 .endm
 
 /*
+ * Switch from the entry-trampline stack to the kernel stack of the
+ * running task.
+ *
+ * nr_regs is the number of dwords to push from the entry stack to the
+ * task stack. If it is > 0 it expects an irq frame at the bottom of the
+ * stack.
+ *
+ * check_user != 0 it will add a check to only switch stacks if the
+ * kernel entry was from user-space.
+ */
+.macro SWITCH_TO_KERNEL_STACK nr_regs=0 check_user=0
+
+	.if \check_user > 0 && \nr_regs > 0
+	testb $3, (\nr_regs - 4)*4(%esp)		/* CS */
+	jz .Lend_\@
+	.endif
+
+	pushl %edi
+	movl  %esp, %edi
+
+	/*
+	 * TSS_sysenter_stack is the offset from the bottom of the
+	 * entry-stack
+	 */
+	movl  TSS_sysenter_stack + ((\nr_regs + 1) * 4)(%esp), %esp
+
+	/* Copy the registers over */
+	.if \nr_regs > 0
+	i = 0
+	.rept \nr_regs
+	pushl (\nr_regs - i) * 4(%edi)
+	i = i + 1
+	.endr
+	.endif
+
+	mov (%edi), %edi
+
+.Lend_\@:
+.endm
+
+/*
  * %eax: prev task
  * %edx: next task
  */
@@ -401,7 +442,9 @@ ENTRY(xen_sysenter_target)
  * 0(%ebp) arg6
  */
 ENTRY(entry_SYSENTER_32)
-	movl	TSS_sysenter_stack(%esp), %esp
+	/* Kernel stack is empty */
+	SWITCH_TO_KERNEL_STACK
+
 .Lsysenter_past_esp:
 	pushl	$__USER_DS		/* pt_regs->ss */
 	pushl	%ebp			/* pt_regs->sp (stashed in bp) */
@@ -521,6 +564,10 @@ ENDPROC(entry_SYSENTER_32)
 ENTRY(entry_INT80_32)
 	ASM_CLAC
 	pushl	%eax			/* pt_regs->orig_ax */
+
+	/* Stack layout: ss, esp, eflags, cs, eip, orig_eax */
+	SWITCH_TO_KERNEL_STACK nr_regs=6 check_user=1
+
 	SAVE_ALL pt_regs_ax=$-ENOSYS	/* save rest */
 
 	/*
@@ -655,6 +702,10 @@ END(irq_entries_start)
 common_interrupt:
 	ASM_CLAC
 	addl	$-0x80, (%esp)			/* Adjust vector into the [-256, -1] range */
+
+	/* Stack layout: ss, esp, eflags, cs, eip, vector */
+	SWITCH_TO_KERNEL_STACK nr_regs=6 check_user=1
+
 	SAVE_ALL
 	ENCODE_FRAME_POINTER
 	TRACE_IRQS_OFF
@@ -663,16 +714,17 @@ common_interrupt:
 	jmp	ret_from_intr
 ENDPROC(common_interrupt)
 
-#define BUILD_INTERRUPT3(name, nr, fn)	\
-ENTRY(name)				\
-	ASM_CLAC;			\
-	pushl	$~(nr);			\
-	SAVE_ALL;			\
-	ENCODE_FRAME_POINTER;		\
-	TRACE_IRQS_OFF			\
-	movl	%esp, %eax;		\
-	call	fn;			\
-	jmp	ret_from_intr;		\
+#define BUILD_INTERRUPT3(name, nr, fn)			\
+ENTRY(name)						\
+	ASM_CLAC;					\
+	pushl	$~(nr);					\
+	SWITCH_TO_KERNEL_STACK nr_regs=6 check_user=1;	\
+	SAVE_ALL;					\
+	ENCODE_FRAME_POINTER;				\
+	TRACE_IRQS_OFF					\
+	movl	%esp, %eax;				\
+	call	fn;					\
+	jmp	ret_from_intr;				\
 ENDPROC(name)
 
 #define BUILD_INTERRUPT(name, nr)		\
@@ -893,6 +945,9 @@ ENTRY(page_fault)
 END(page_fault)
 
 common_exception:
+	/* Stack layout: ss, esp, eflags, cs, eip, error_code, handler */
+	SWITCH_TO_KERNEL_STACK nr_regs=7 check_user=1
+
 	/* the function address is in %gs's slot on the stack */
 	pushl	%fs
 	pushl	%es
@@ -936,6 +991,10 @@ ENTRY(debug)
 	 */
 	ASM_CLAC
 	pushl	$-1				# mark this as an int
+
+	/* Stack layout: ss, esp, eflags, cs, eip, $-1 */
+	SWITCH_TO_KERNEL_STACK nr_regs=6 check_user=1
+
 	SAVE_ALL
 	ENCODE_FRAME_POINTER
 	xorl	%edx, %edx			# error code 0
@@ -971,6 +1030,10 @@ END(debug)
  */
 ENTRY(nmi)
 	ASM_CLAC
+
+	/* Stack layout: ss, esp, eflags, cs, eip */
+	SWITCH_TO_KERNEL_STACK nr_regs=5 check_user=1
+
 #ifdef CONFIG_X86_ESPFIX32
 	pushl	%eax
 	movl	%ss, %eax
@@ -1034,6 +1097,10 @@ END(nmi)
 ENTRY(int3)
 	ASM_CLAC
 	pushl	$-1				# mark this as an int
+
+	/* Stack layout: ss, esp, eflags, cs, eip, vector */
+	SWITCH_TO_KERNEL_STACK nr_regs=6 check_user=1
+
 	SAVE_ALL
 	ENCODE_FRAME_POINTER
 	TRACE_IRQS_OFF
