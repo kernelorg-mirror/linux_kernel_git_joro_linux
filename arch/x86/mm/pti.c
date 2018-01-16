@@ -122,6 +122,7 @@ pgd_t __pti_set_user_pgd(pgd_t *pgdp, pgd_t pgd)
 	 */
 	kernel_to_user_pgdp(pgdp)->pgd = pgd.pgd;
 
+#ifdef CONFIG_X86_64
 	/*
 	 * If this is normal user memory, make it NX in the kernel
 	 * pagetables so that, if we somehow screw up and return to
@@ -134,10 +135,16 @@ pgd_t __pti_set_user_pgd(pgd_t *pgdp, pgd_t pgd)
 	 *     may execute from it
 	 *  - we don't have NX support
 	 *  - we're clearing the PGD (i.e. the new pgd is not present).
+	 *  - We run on a 32 bit kernel. 2-level paging doesn't support NX at
+	 *    all and PAE paging does not support it on the PGD level. We can
+	 *    set it in the PMD level there in the future, but that means we
+	 *    need to unshare the PMDs between the kernel and the user
+	 *    page-tables.
 	 */
 	if ((pgd.pgd & (_PAGE_USER|_PAGE_PRESENT)) == (_PAGE_USER|_PAGE_PRESENT) &&
 	    (__supported_pte_mask & _PAGE_NX))
 		pgd.pgd |= _PAGE_NX;
+#endif
 
 	/* return the copy of the PGD we want the kernel to use: */
 	return pgd;
