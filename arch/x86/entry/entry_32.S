@@ -263,6 +263,61 @@
 .endm
 
 /*
+ * Switch back from the kernel stack to the entry stack.
+ *
+ * iret_frame > 0 adds code to copie over an iret frame from the old to
+ *                the new stack. It also adds a check which bails out if
+ *                we are not returning to user-space.
+ *
+ * This macro is allowed not modify eflags when iret_frame == 0.
+ */
+.macro SWITCH_TO_ENTRY_STACK iret_frame=0
+	.if \iret_frame > 0
+	/* Are we returning to userspace? */
+	testb   $3, 4(%esp) /* return CS */
+	jz .Lend_\@
+	.endif
+
+	/*
+	 * We run with user-%fs already loaded from pt_regs, so we don't
+	 * have access to per_cpu data anymore, and there is no swapgs
+	 * equivalent on x86_32.
+	 * We work around this by loading the kernel-%fs again and
+	 * reading the entry stack address from there. Then we restore
+	 * the user-%fs and return.
+	 */
+	pushl %fs
+	pushl %edi
+
+	/* Re-load kernel-%fs, after that we can use PER_CPU_VAR */
+	movl $(__KERNEL_PERCPU), %edi
+	movl %edi, %fs
+
+	/* Save old stack pointer to copy the return frame over if needed */
+	movl %esp, %edi
+	movl PER_CPU_VAR(cpu_tss_rw + TSS_sp0), %esp
+
+	/* Now we are on the entry stack */
+
+	.if \iret_frame > 0
+	/* Stack frame: ss, esp, eflags, cs, eip, fs, edi */
+	pushl 6*4(%edi) /* ss */
+	pushl 5*4(%edi) /* esp */
+	pushl 4*4(%edi) /* eflags */
+	pushl 3*4(%edi) /* cs */
+	pushl 2*4(%edi) /* eip */
+	.endif
+
+	pushl 4(%edi)   /* fs */
+	
+	/* Restore user %edi and user %fs */
+	movl (%edi), %edi
+	popl %fs
+
+.Lend_\@:
+.endm
+
+/*
  * %eax: prev task
  * %edx: next task
  */
@@ -512,6 +567,8 @@ ENTRY(entry_SYSENTER_32)
 	btr	$X86_EFLAGS_IF_BIT, (%esp)
 	popfl
 
+	SWITCH_TO_ENTRY_STACK
+
 	/*
 	 * Return back to the vDSO, which will pop ecx and edx.
 	 * Don't bother with DS and ES (they already contain __USER_DS).
@@ -601,6 +658,7 @@ restore_all:
 .Lrestore_nocheck:
 	RESTORE_REGS 4				# skip orig_eax/error_code
 .Lirq_return:
+	SWITCH_TO_ENTRY_STACK iret_frame=1
 	INTERRUPT_RETURN
 
 .section .fixup, "ax"
