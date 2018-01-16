@@ -221,6 +221,25 @@
 	POP_GS_EX
 .endm
 
+#define PTI_SWITCH_MASK         (1 << PAGE_SHIFT)
+
+.macro SWITCH_TO_KERNEL_CR3
+        ALTERNATIVE "jmp .Lend_\@", "", X86_FEATURE_PTI
+        movl    %cr3, %edi
+        andl    $(~PTI_SWITCH_MASK), %edi
+        movl    %edi, %cr3
+.Lend_\@:
+.endm
+
+.macro SWITCH_TO_USER_CR3
+        ALTERNATIVE "jmp .Lend_\@", "", X86_FEATURE_PTI
+        mov     %cr3, %edi
+        /* Flip the PGD to the user version */
+        orl     $(PTI_SWITCH_MASK), %edi
+        mov     %edi, %cr3
+.Lend_\@:
+.endm
+
 /*
  * Switch from the entry-trampline stack to the kernel stack of the
  * running task.
@@ -240,6 +259,7 @@
 	.endif
 
 	pushl %edi
+	SWITCH_TO_KERNEL_CR3
 	movl  %esp, %edi
 
 	/*
@@ -309,9 +329,12 @@
 	.endif
 
 	pushl 4(%edi)   /* fs */
+	pushl  (%edi)   /* edi */
+
+	SWITCH_TO_USER_CR3
 	
 	/* Restore user %edi and user %fs */
-	movl (%edi), %edi
+	popl %edi
 	popl %fs
 
 .Lend_\@:
