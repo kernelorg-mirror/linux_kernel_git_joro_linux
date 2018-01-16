@@ -135,25 +135,36 @@
 
 #endif /* CONFIG_X86_32_LAZY_GS */
 
-.macro SAVE_ALL pt_regs_ax=%eax
+.macro SAVE_ALL pt_regs_ax=%eax switch_stacks=0
 	cld
+	/* Push segment registers and %eax */
 	PUSH_GS
 	pushl	%fs
 	pushl	%es
 	pushl	%ds
 	pushl	\pt_regs_ax
+
+	/* Load kernel segments */
+	movl	$(__USER_DS), %eax
+	movl	%eax, %ds
+	movl	%eax, %es
+	movl	$(__KERNEL_PERCPU), %eax
+	movl	%eax, %fs
+	SET_KERNEL_GS %eax
+
+	/* Push integer registers and complete PT_REGS */
 	pushl	%ebp
 	pushl	%edi
 	pushl	%esi
 	pushl	%edx
 	pushl	%ecx
 	pushl	%ebx
-	movl	$(__USER_DS), %edx
-	movl	%edx, %ds
-	movl	%edx, %es
-	movl	$(__KERNEL_PERCPU), %edx
-	movl	%edx, %fs
-	SET_KERNEL_GS %edx
+
+	/* Switch to kernel stack if necessary */
+.if \switch_stacks > 0
+	SWITCH_TO_KERNEL_STACK
+.endif
+
 .endm
 
 /*
@@ -261,6 +272,72 @@
 .Lend_\@:
 #endif /* CONFIG_X86_ESPFIX32 */
 .endm
+
+
+/*
+ * Called with pt_regs fully populated and kernel segments loaded,
+ * so we can access PER_CPU and use the integer registers.
+ *
+ * We need to be very careful here with the %esp switch, because an NMI
+ * can happen everywhere. If the NMI handler finds itself on the
+ * entry-stack, it will overwrite the task-stack and everything we
+ * copied there. So allocate the stack-frame on the task-stack and
+ * switch to it before we do any copying.
+ */
+.macro SWITCH_TO_KERNEL_STACK
+
+	ALTERNATIVE     "", "jmp .Lend_\@", X86_FEATURE_XENPV
+
+	/* Are we on the entry stack? Bail out if not! */
+	movl	PER_CPU_VAR(cpu_entry_area), %edi
+	addl	$CPU_ENTRY_AREA_entry_stack, %edi
+	cmpl	%esp, %edi
+	jae	.Lend_\@
+
+	/* Load stack pointer into %esi and %edi */
+	movl	%esp, %esi
+	movl	%esi, %edi
+
+	/* Move %edi to the top of the entry stack */
+	andl	$(MASK_entry_stack), %edi
+	addl	$(SIZEOF_entry_stack), %edi
+
+	/* Load top of task-stack into %edi */
+	movl	TSS_entry_stack(%edi), %edi
+
+	/* Bytes to copy */
+	movl	$PTREGS_SIZE, %ecx
+
+#ifdef CONFIG_VM86
+	testl	$X86_EFLAGS_VM, PT_EFLAGS(%esi)
+	jz	.Lcopy_pt_regs_\@
+
+	/*
+	 * Stack-frame contains 4 additional segment registers when
+	 * coming from VM86 mode
+	 */
+	addl	$(4 * 4), %ecx
+
+.Lcopy_pt_regs_\@:
+#endif
+
+	/* Allocate frame on task-stack */
+	subl	%ecx, %edi
+
+	/* Switch to task-stack */
+	movl	%edi, %esp
+
+	/*
+	 * We are now on the task-stack and can safely copy over the
+	 * stack-frame
+	 */
+	shrl	$2, %ecx
+	cld
+	rep movsl
+
+.Lend_\@:
+.endm
+
 /*
  * %eax: prev task
  * %edx: next task
@@ -454,6 +531,7 @@ ENTRY(xen_sysenter_target)
  */
 ENTRY(entry_SYSENTER_32)
 	movl	TSS_entry_stack(%esp), %esp
+
 .Lsysenter_past_esp:
 	pushl	$__USER_DS		/* pt_regs->ss */
 	pushl	%ebp			/* pt_regs->sp (stashed in bp) */
@@ -462,7 +540,7 @@ ENTRY(entry_SYSENTER_32)
 	pushl	$__USER_CS		/* pt_regs->cs */
 	pushl	$0			/* pt_regs->ip = 0 (placeholder) */
 	pushl	%eax			/* pt_regs->orig_ax */
-	SAVE_ALL pt_regs_ax=$-ENOSYS	/* save rest */
+	SAVE_ALL pt_regs_ax=$-ENOSYS	/* save rest, stack already switched */
 
 	/*
 	 * SYSENTER doesn't filter flags, so we need to clear NT, AC
@@ -573,7 +651,8 @@ ENDPROC(entry_SYSENTER_32)
 ENTRY(entry_INT80_32)
 	ASM_CLAC
 	pushl	%eax			/* pt_regs->orig_ax */
-	SAVE_ALL pt_regs_ax=$-ENOSYS	/* save rest */
+
+	SAVE_ALL pt_regs_ax=$-ENOSYS switch_stacks=1	/* save rest */
 
 	/*
 	 * User mode is traced as though IRQs are on, and the interrupt gate
@@ -665,7 +744,8 @@ END(irq_entries_start)
 common_interrupt:
 	ASM_CLAC
 	addl	$-0x80, (%esp)			/* Adjust vector into the [-256, -1] range */
-	SAVE_ALL
+
+	SAVE_ALL switch_stacks=1
 	ENCODE_FRAME_POINTER
 	TRACE_IRQS_OFF
 	movl	%esp, %eax
@@ -673,16 +753,16 @@ common_interrupt:
 	jmp	ret_from_intr
 ENDPROC(common_interrupt)
 
-#define BUILD_INTERRUPT3(name, nr, fn)	\
-ENTRY(name)				\
-	ASM_CLAC;			\
-	pushl	$~(nr);			\
-	SAVE_ALL;			\
-	ENCODE_FRAME_POINTER;		\
-	TRACE_IRQS_OFF			\
-	movl	%esp, %eax;		\
-	call	fn;			\
-	jmp	ret_from_intr;		\
+#define BUILD_INTERRUPT3(name, nr, fn)			\
+ENTRY(name)						\
+	ASM_CLAC;					\
+	pushl	$~(nr);					\
+	SAVE_ALL switch_stacks=1;			\
+	ENCODE_FRAME_POINTER;				\
+	TRACE_IRQS_OFF					\
+	movl	%esp, %eax;				\
+	call	fn;					\
+	jmp	ret_from_intr;				\
 ENDPROC(name)
 
 #define BUILD_INTERRUPT(name, nr)		\
@@ -908,16 +988,20 @@ common_exception:
 	pushl	%es
 	pushl	%ds
 	pushl	%eax
+	movl	$(__USER_DS), %eax
+	movl	%eax, %ds
+	movl	%eax, %es
+	movl	$(__KERNEL_PERCPU), %eax
+	movl	%eax, %fs
 	pushl	%ebp
 	pushl	%edi
 	pushl	%esi
 	pushl	%edx
 	pushl	%ecx
 	pushl	%ebx
+	SWITCH_TO_KERNEL_STACK
 	ENCODE_FRAME_POINTER
 	cld
-	movl	$(__KERNEL_PERCPU), %ecx
-	movl	%ecx, %fs
 	UNWIND_ESPFIX_STACK
 	GS_TO_REG %ecx
 	movl	PT_GS(%esp), %edi		# get the function address
@@ -925,9 +1009,6 @@ common_exception:
 	movl	$-1, PT_ORIG_EAX(%esp)		# no syscall to restart
 	REG_TO_PTGS %ecx
 	SET_KERNEL_GS %ecx
-	movl	$(__USER_DS), %ecx
-	movl	%ecx, %ds
-	movl	%ecx, %es
 	TRACE_IRQS_OFF
 	movl	%esp, %eax			# pt_regs pointer
 	CALL_NOSPEC %edi
@@ -946,6 +1027,7 @@ ENTRY(debug)
 	 */
 	ASM_CLAC
 	pushl	$-1				# mark this as an int
+
 	SAVE_ALL
 	ENCODE_FRAME_POINTER
 	xorl	%edx, %edx			# error code 0
@@ -981,6 +1063,7 @@ END(debug)
  */
 ENTRY(nmi)
 	ASM_CLAC
+
 #ifdef CONFIG_X86_ESPFIX32
 	pushl	%eax
 	movl	%ss, %eax
@@ -1048,7 +1131,8 @@ END(nmi)
 ENTRY(int3)
 	ASM_CLAC
 	pushl	$-1				# mark this as an int
-	SAVE_ALL
+
+	SAVE_ALL switch_stacks=1
 	ENCODE_FRAME_POINTER
 	TRACE_IRQS_OFF
 	xorl	%edx, %edx			# zero error code
