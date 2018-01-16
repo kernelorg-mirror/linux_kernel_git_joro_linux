@@ -202,8 +202,12 @@ static __init pmd_t *pti_user_pagetable_walk_pmd(unsigned long address)
 		unsigned long new_pmd_page = __get_free_page(gfp);
 		if (!new_pmd_page)
 			return NULL;
-
+#ifdef CONFIG_X86_PAE
+		/* TODO: There must be a cleaner way to do this */
+		set_pud(pud, __pud(_PAGE_PRESENT | __pa(new_pmd_page)));
+#else
 		set_pud(pud, __pud(_KERNPG_TABLE | __pa(new_pmd_page)));
+#endif
 	}
 
 	return pmd_offset(pud, address);
