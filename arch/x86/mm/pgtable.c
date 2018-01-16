@@ -313,7 +313,7 @@ static int __init pgd_cache_init(void)
 	 * When PAE kernel is running as a Xen domain, it does not use
 	 * shared kernel pmd. And this requires a whole page for pgd.
 	 */
-	if (!SHARED_KERNEL_PMD)
+	if (static_cpu_has(X86_FEATURE_PTI) || !SHARED_KERNEL_PMD)
 		return 0;
 
 	/*
@@ -337,8 +337,9 @@ static inline pgd_t *_pgd_alloc(void)
 	 * If no SHARED_KERNEL_PMD, PAE kernel is running as a Xen domain.
 	 * We allocate one page for pgd.
 	 */
-	if (!SHARED_KERNEL_PMD)
-		return (pgd_t *)__get_free_page(PGALLOC_GFP);
+	if (static_cpu_has(X86_FEATURE_PTI) || !SHARED_KERNEL_PMD)
+		return (pgd_t *)__get_free_pages(PGALLOC_GFP,
+						 PGD_ALLOCATION_ORDER);
 
 	/*
 	 * Now PAE kernel is not running as a Xen domain. We can allocate
@@ -349,8 +350,8 @@ static inline pgd_t *_pgd_alloc(void)
 
 static inline void _pgd_free(pgd_t *pgd)
 {
-	if (!SHARED_KERNEL_PMD)
-		free_page((unsigned long)pgd);
+	if (static_cpu_has(X86_FEATURE_PTI) || !SHARED_KERNEL_PMD)
+		free_pages((unsigned long)pgd, PGD_ALLOCATION_ORDER);
 	else
 		kmem_cache_free(pgd_cache, pgd);
 }
