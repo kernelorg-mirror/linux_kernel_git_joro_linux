@@ -92,11 +92,6 @@
 .macro PUSH_GS
 	pushl	$0
 .endm
-.macro POP_GS pop=0
-	addl	$(4 + \pop), %esp
-.endm
-.macro POP_GS_EX
-.endm
 
  /* all the rest are no-op */
 .macro PTGS_TO_GS
@@ -114,20 +109,6 @@
 
 .macro PUSH_GS
 	pushl	%gs
-.endm
-
-.macro POP_GS pop=0
-98:	popl	%gs
-  .if \pop <> 0
-	add	$\pop, %esp
-  .endif
-.endm
-.macro POP_GS_EX
-.pushsection .fixup, "ax"
-99:	movl	$0, (%esp)
-	jmp	98b
-.popsection
-	_ASM_EXTABLE(98b, 99b)
 .endm
 
 .macro PTGS_TO_GS
@@ -201,24 +182,35 @@
 	popl	%eax
 .endm
 
-.macro RESTORE_REGS pop=0
-	RESTORE_INT_REGS
-1:	popl	%ds
-2:	popl	%es
-3:	popl	%fs
-	POP_GS \pop
+.macro RESTORE_SEGMENTS
+1:	mov	PT_DS(%esp), %ds
+2:	mov	PT_ES(%esp), %es
+3:	mov	PT_FS(%esp), %fs
+	PTGS_TO_GS
 .pushsection .fixup, "ax"
-4:	movl	$0, (%esp)
+4:	movl	$0, PT_DS(%esp)
 	jmp	1b
-5:	movl	$0, (%esp)
+5:	movl	$0, PT_ES(%esp)
 	jmp	2b
-6:	movl	$0, (%esp)
+6:	movl	$0, PT_FS(%esp)
 	jmp	3b
 .popsection
 	_ASM_EXTABLE(1b, 4b)
 	_ASM_EXTABLE(2b, 5b)
 	_ASM_EXTABLE(3b, 6b)
-	POP_GS_EX
+	PTGS_TO_GS_EX
+.endm
+
+.macro RESTORE_SKIP_SEGMENTS pop=0
+	/* Jump over the segments stored on stack */
+	addl	$((4 * 4) + \pop), %esp
+.endm
+
+.macro RESTORE_REGS pop=0
+	RESTORE_SEGMENTS
+	RESTORE_INT_REGS
+	/* Skip over already restored segment registers */
+	RESTORE_SKIP_SEGMENTS \pop
 .endm
 
 .macro CHECK_AND_APPLY_ESPFIX
