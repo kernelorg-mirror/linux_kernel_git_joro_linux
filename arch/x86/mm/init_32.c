@@ -956,4 +956,10 @@ void mark_rodata_ro(void)
 	mark_nxdata_nx();
 	if (__supported_pte_mask & _PAGE_NX)
 		debug_checkwx();
+
+	/*
+	 * Do this after all of the manipulation of the
+	 * kernel text page tables are complete.
+	 */
+	pti_clone_kernel_text();
 }
