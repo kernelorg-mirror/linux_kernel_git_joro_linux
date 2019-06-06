@@ -124,6 +124,14 @@ ENTRY(startup_32)
 	addl	%ebp, gdt+2(%ebp)
 	lgdt	gdt(%ebp)
 
+	/* Reload CS from the kernel GDT */
+	push	$__KERNEL32_CS
+	lea	reload_cs(%ebp), %eax
+	push	%eax
+	lret
+
+reload_cs:
+
 	/* Enable PAE mode */
 	movl	%cr4, %eax
 	orl	$X86_CR4_PAE, %eax
