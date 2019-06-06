@@ -34,6 +34,7 @@
 #include <asm/asm-offsets.h>
 #include <asm/bootparam.h>
 #include "pgtable.h"
+#include "boot_idt.h"
 
 /*
  * Locally defined symbols should be marked hidden:
@@ -116,10 +117,6 @@ ENTRY(startup_32)
 	subl	$_end, %eax
 	addl	%eax, %ebx
 
-/*
- * Prepare for entering 64 bit mode
- */
-
 	/* Load new GDT with the 64bit segments using 32bit descriptor */
 	addl	%ebp, gdt+2(%ebp)
 	lgdt	gdt(%ebp)
@@ -131,6 +128,21 @@ ENTRY(startup_32)
 	lret
 
 reload_cs:
+
+#ifdef CONFIG_AMD_SEV_ES_GUEST
+/*
+ * Set up boot exception handling
+ */
+
+	/* Load the boot IDT - There are no handlers registered yet */
+	addl	%ebp,boot32_idt_desc+2(%ebp)
+	lidt	boot32_idt_desc(%ebp)
+#endif
+
+
+/*
+ * Prepare for entering 64 bit mode
+ */
 
 	/* Enable PAE mode */
 	movl	%cr4, %eax
@@ -678,6 +690,19 @@ gdt:
 	.quad	0x0080890000000000	/* TS descriptor */
 	.quad   0x0000000000000000	/* TS continued */
 gdt_end:
+
+boot32_idt_desc:
+	.word	boot32_idt_end - boot32_idt
+	.long	boot32_idt
+	.word	0
+
+boot32_idt:
+	.rept 32
+	.quad 0
+	.endr
+boot32_idt_end:
+
+.globl boot32_idt
 
 #ifdef CONFIG_EFI_STUB
 efi_config:
