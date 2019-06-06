@@ -4,6 +4,8 @@
 
 #ifdef __ASSEMBLY__
 
+#define BOOT_VECTOR_VC 29
+
 .macro BOOT32_IDT_ENTRY vector:req handler:req
 	push	%eax
 	push	%ebx

@@ -12,6 +12,8 @@
 #include <asm/processor-flags.h>
 #include <asm/msr.h>
 #include <asm/asm-offsets.h>
+#include <asm/segment.h>
+#include "boot_idt.h"
 
 	.text
 	.code32
@@ -66,6 +68,21 @@ ENTRY(get_sev_encryption_bit)
 
 	ret
 ENDPROC(get_sev_encryption_bit)
+
+ENTRY(boot32_install_vc_handler)
+	BOOT32_IDT_ENTRY BOOT_VECTOR_VC boot32_vc_handler
+	ret
+ENDPROC(boot32_install_vc_handler)
+
+
+boot32_vc_handler:
+	/*
+	 * We don't implement legacy booting with SEV-ES yet, so just hang the
+	 * machine.
+	 */
+1:	hlt
+	jmp 1b
+	iret
 
 	.code64
 ENTRY(set_sev_encryption_mask)

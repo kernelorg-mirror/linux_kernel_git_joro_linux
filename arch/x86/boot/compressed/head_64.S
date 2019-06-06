@@ -137,8 +137,10 @@ reload_cs:
 	/* Load the boot IDT - There are no handlers registered yet */
 	addl	%ebp,boot32_idt_desc+2(%ebp)
 	lidt	boot32_idt_desc(%ebp)
-#endif
 
+	/* Install VC handler */
+	call	boot32_install_vc_handler
+#endif
 
 /*
  * Prepare for entering 64 bit mode
