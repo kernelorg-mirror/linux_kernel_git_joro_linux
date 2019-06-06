@@ -86,10 +86,6 @@ ENTRY(startup_32)
 	addl	%ebp, %eax
 	movl	%eax, %esp
 
-	call	verify_cpu
-	testl	%eax, %eax
-	jnz	no_longmode
-
 /*
  * Compute the delta between where we were compiled to run at
  * and where the code will actually run at.
@@ -141,6 +137,18 @@ reload_cs:
 	/* Install VC handler */
 	call	boot32_install_vc_handler
 #endif
+
+	/*
+	 * Call verify_cpu after exception handling is set up, as it might
+	 * trigger #VC exceptions when the kernel runs as an SEV-ES guest.
+	 * Save and restore %ebx, as it contains the relocation offset.
+	 */
+
+	pushl	%ebx
+	call	verify_cpu
+	popl	%ebx
+	testl	%eax, %eax
+	jnz	no_longmode
 
 /*
  * Prepare for entering 64 bit mode
