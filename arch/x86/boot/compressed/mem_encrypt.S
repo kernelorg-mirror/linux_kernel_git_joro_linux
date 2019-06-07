@@ -70,7 +70,7 @@ ENTRY(get_sev_encryption_bit)
 ENDPROC(get_sev_encryption_bit)
 
 ENTRY(boot32_install_vc_handler)
-	BOOT32_IDT_ENTRY BOOT_VECTOR_VC boot32_vc_handler
+	BOOT_IDT_ENTRY BOOT_VECTOR_VC boot32_vc_handler
 	ret
 ENDPROC(boot32_install_vc_handler)
 

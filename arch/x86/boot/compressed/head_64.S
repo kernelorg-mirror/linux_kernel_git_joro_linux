@@ -384,6 +384,14 @@ ENTRY(startup_64)
 	movq	%rax, gdt64+2(%rip)
 	lgdt	gdt64(%rip)
 
+#ifdef CONFIG_AMD_SEV_ES_GUEST
+	/*
+	 * Install the IDT in a separate function, otherwise startup_64
+	 * will grow too big and the .org directives below fail
+	 */
+	call	install_boot_idt
+#endif
+
 	/*
 	 * paging_prepare() sets up the trampoline and checks if we need to
 	 * enable 5-level paging.
@@ -540,6 +548,36 @@ ENTRY(efi64_stub_entry)
 ENDPROC(efi64_stub_entry)
 #endif
 
+#ifdef CONFIG_AMD_SEV_ES_GUEST
+ENTRY(install_boot_idt)
+	/* Install an early IDT to handle #VC exceptions */
+
+	pushq %rax
+	pushq %rbx
+
+	/*
+	 * First clear the IDT - it was used for 32 bit mode already.
+	 * There is no %es segment yet, so string instructions can't
+	 * be used.
+	 */
+	leaq	boot_idt(%rip), %rax
+	leaq	boot_idt_end(%rip), %rbx
+1:	movq	$0, (%rax)
+	addq	$8, %rax
+	cmpq	%rax, %rbx
+	jne	1b
+
+	/* Install the empty IDT */
+	leaq	boot_idt(%rip), %rax
+	movq	%rax, boot64_idt_desc+2(%rip)
+	lidt	boot64_idt_desc(%rip)
+
+	popq	%rbx
+	popq	%rax
+	ret
+ENDPROC(install_boot_idt)
+#endif
+
 	.text
 relocated:
 
@@ -553,6 +591,10 @@ relocated:
 	shrq	$3, %rcx
 	rep	stosq
 
+#ifdef CONFIG_AMD_SEV_ES_GUEST
+	/* Re-install IDT after relocation */
+	call install_boot_idt
+#endif
 /*
  * Do the extraction, and jump to the new kernel..
  */
@@ -702,17 +744,23 @@ gdt:
 gdt_end:
 
 boot32_idt_desc:
-	.word	boot32_idt_end - boot32_idt
-	.long	boot32_idt
+	.word	boot_idt_end - boot_idt
+	.long	boot_idt
 	.word	0
 
-boot32_idt:
+boot64_idt_desc:
+	.word	boot_idt_end - boot_idt
+	.quad	0
+
+/* Make the IDT big enough for Long Mode */
+boot_idt:
 	.rept 32
 	.quad 0
+	.quad 0
 	.endr
-boot32_idt_end:
+boot_idt_end:
 
-.globl boot32_idt
+.globl boot_idt
 
 #ifdef CONFIG_EFI_STUB
 efi_config:
