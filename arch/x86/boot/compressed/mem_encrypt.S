@@ -5,6 +5,7 @@
  * Copyright (C) 2017 Advanced Micro Devices, Inc.
  *
  * Author: Tom Lendacky <thomas.lendacky@amd.com>
+ *         Joerg Roedel <jroedel@suse.de>
  */
 
 #include <linux/linkage.h>
@@ -108,6 +109,64 @@ ENTRY(set_sev_encryption_mask)
 	xor	%rax, %rax
 	ret
 ENDPROC(set_sev_encryption_mask)
+
+#ifdef CONFIG_AMD_SEV_ES_GUEST
+ENTRY(install_boot_vc_handler)
+	BOOT_IDT_ENTRY BOOT_VECTOR_VC boot_vc_handler lm=1
+	ret
+ENDPROC(install_boot_vc_handler)
+
+.macro EXCEPTION_HANDLER name function error_code=0
+\name:
+	/* Build pt_regs */
+	.if \error_code == 0
+	pushq	$0
+	.endif
+
+	pushq	%rdi
+	pushq	%rsi
+	pushq	%rdx
+	pushq	%rcx
+	pushq	%rax
+	pushq	%r8
+	pushq	%r9
+	pushq	%r10
+	pushq	%r11
+	pushq	%rbx
+	pushq	%rbp
+	pushq	%r12
+	pushq	%r13
+	pushq	%r14
+	pushq	%r15
+
+	/* Call handler with pt_regs */
+	movq	%rsp, %rdi
+	call	\function
+
+	/* Restore regs */
+	popq	%r15
+	popq	%r14
+	popq	%r13
+	popq	%r12
+	popq	%rbp
+	popq	%rbx
+	popq	%r11
+	popq	%r10
+	popq	%r9
+	popq	%r8
+	popq	%rax
+	popq	%rcx
+	popq	%rdx
+	popq	%rsi
+	popq	%rdi
+
+	/* Remove error code and return */
+	addq	$8, %rsp
+	iretq
+.endm
+
+EXCEPTION_HANDLER boot_vc_handler vc_handler error_code=1
+#endif
 
 	.data
 

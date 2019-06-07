@@ -572,6 +572,8 @@ ENTRY(install_boot_idt)
 	movq	%rax, boot64_idt_desc+2(%rip)
 	lidt	boot64_idt_desc(%rip)
 
+	call	install_boot_vc_handler
+
 	popq	%rbx
 	popq	%rax
 	ret
@@ -601,7 +603,7 @@ relocated:
 	lgdt	gdt64(%rip)
 
 #ifdef CONFIG_AMD_SEV_ES_GUEST
-	/* Re-install IDT after relocation */
+	/* Reinstall IDT with relocated addresses */
 	call install_boot_idt
 #endif
 
