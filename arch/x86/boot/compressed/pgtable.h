@@ -12,6 +12,13 @@
 
 #ifndef __ASSEMBLER__
 
+#define PGT_IDX_BITS	9
+#define PGT_IDX_MASK	((1UL << PGT_IDX_BITS) - 1)
+#define PGT_L0_IDX(a)	(((a) >> (PAGE_SHIFT + (0 * PGT_IDX_BITS))) & PGT_IDX_MASK)
+#define PGT_L1_IDX(a)	(((a) >> (PAGE_SHIFT + (1 * PGT_IDX_BITS))) & PGT_IDX_MASK)
+#define PGT_L2_IDX(a)	(((a) >> (PAGE_SHIFT + (2 * PGT_IDX_BITS))) & PGT_IDX_MASK)
+#define PGT_L3_IDX(a)	(((a) >> (PAGE_SHIFT + (3 * PGT_IDX_BITS))) & PGT_IDX_MASK)
+
 extern unsigned long *trampoline_32bit;
 
 extern void trampoline_32bit_src(void *return_ptr);

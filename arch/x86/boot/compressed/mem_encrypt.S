@@ -175,3 +175,14 @@ EXCEPTION_HANDLER boot_vc_handler vc_handler error_code=1
 GLOBAL(sme_me_mask)
 	.quad	0
 #endif
+
+#ifdef CONFIG_AMD_SEV_ES_GUEST
+	.balign	4096
+GLOBAL(boot_ghcb)
+	.fill	4096, 1, 0
+
+	.balign	4096
+GLOBAL(boot_ghcb_pt_pages)
+	/* Need 3 pages to map the GHCB */
+	.fill	3*4096, 1, 0
+#endif
