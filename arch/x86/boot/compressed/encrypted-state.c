@@ -6,6 +6,8 @@
  */
 
 #include <asm/encrypted-state.h>
+#include <asm/fpu/internal.h>
+#include <asm/processor.h>
 #include <asm/msr-index.h>
 #include <asm/ptrace.h>
 #include <asm/svm.h>
@@ -106,6 +108,9 @@ void boot_vc_handler(struct pt_regs *regs)
 	switch (exit_code) {
 	case SVM_EXIT_IOIO:
 		result = handle_ioio(boot_ghcb, &ctxt);
+		break;
+	case SVM_EXIT_CPUID:
+		result = handle_cpuid(boot_ghcb, &ctxt);
 		break;
 	default:
 		result = ES_UNSUPPORTED;

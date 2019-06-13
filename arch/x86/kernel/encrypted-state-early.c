@@ -423,3 +423,38 @@ handle_ioio(struct ghcb *ghcb, struct es_em_ctxt *ctxt)
 
 	return ret;
 }
+
+static enum es_result __maybe_unused
+handle_cpuid(struct ghcb *ghcb, struct es_em_ctxt *ctxt)
+{
+	struct pt_regs *regs = ctxt->regs;
+	u32 cr4 = native_read_cr4();
+	enum es_result ret;
+
+	ghcb_set_rax(ghcb, lower_bits(regs->ax, 32));
+	ghcb_set_rcx(ghcb, lower_bits(regs->cx, 32));
+
+	if (cr4 & X86_CR4_OSXSAVE)
+		/* Safe to read xcr0 */
+		ghcb_set_xcr0(ghcb, xgetbv(XCR_XFEATURE_ENABLED_MASK));
+	else
+		/* xgetbv will cause #GP - use reset value for xcr0 */
+		ghcb_set_xcr0(ghcb, 1);
+
+	ret = ghcb_hv_call(ghcb, ctxt, SVM_EXIT_CPUID, 0, 0);
+	if (ret != ES_OK)
+		return ret;
+
+	if (!(ghcb_valid_rax(ghcb) &&
+	      ghcb_valid_rbx(ghcb) &&
+	      ghcb_valid_rcx(ghcb) &&
+	      ghcb_valid_rdx(ghcb)))
+		return ES_VMM_ERROR;
+
+	regs->ax = copy_lower_bits(regs->ax, ghcb->save.rax, 32);
+	regs->bx = copy_lower_bits(regs->bx, ghcb->save.rbx, 32);
+	regs->cx = copy_lower_bits(regs->cx, ghcb->save.rcx, 32);
+	regs->dx = copy_lower_bits(regs->dx, ghcb->save.rdx, 32);
+
+	return ES_OK;
+}
