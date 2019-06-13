@@ -10,6 +10,7 @@
 #include <asm/sev-es.h>
 #include <asm/trap_defs.h>
 #include <asm/msr-index.h>
+#include <asm/fpu/xcr.h>
 #include <asm/ptrace.h>
 #include <asm/svm.h>
 
@@ -116,6 +117,9 @@ void boot_vc_handler(struct pt_regs *regs)
 	switch (exit_code) {
 	case SVM_EXIT_IOIO:
 		result = handle_ioio(boot_ghcb, &ctxt);
+		break;
+	case SVM_EXIT_CPUID:
+		result = handle_cpuid(boot_ghcb, &ctxt);
 		break;
 	default:
 		result = ES_UNSUPPORTED;
