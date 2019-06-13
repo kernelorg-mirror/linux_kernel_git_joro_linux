@@ -245,6 +245,43 @@ static bool handle_ioio(struct pt_regs *regs)
 	return true;
 }
 
+static bool handle_cpuid(struct pt_regs *regs)
+{
+	memset(&ghcb->save.valid_bitmap, 0, sizeof(ghcb->save.valid_bitmap));
+
+	ghcb->save.rax = regs->ax & 0xffffffff;
+	ghcb->save.rcx = regs->cx & 0xffffffff;
+	ghcb->save.xcr0 = 0;
+	ghcb->save.sw_exit_code = SVM_EXIT_CPUID;
+	ghcb->save.sw_exit_info_1 = 0;
+	ghcb->save.sw_exit_info_2 = 0;
+
+	SET_GHCB_VALID(ghcb, rax);
+	SET_GHCB_VALID(ghcb, rcx);
+	SET_GHCB_VALID(ghcb, xcr0);
+	SET_GHCB_VALID(ghcb, sw_exit_code);
+	SET_GHCB_VALID(ghcb, sw_exit_info_1);
+	SET_GHCB_VALID(ghcb, sw_exit_info_2);
+
+	ghcb_hv_call();
+
+	regs->ax &= 0xffffffff00000000UL;
+	regs->ax |= ghcb->save.rax & 0xffffffffUL;
+
+	regs->bx &= 0xffffffff00000000UL;
+	regs->bx |= ghcb->save.rbx & 0xffffffffUL;
+
+	regs->cx &= 0xffffffff00000000UL;
+	regs->cx |= ghcb->save.rcx & 0xffffffffUL;
+
+	regs->dx &= 0xffffffff00000000UL;
+	regs->dx |= ghcb->save.rdx & 0xffffffffUL;
+
+	regs->ip += 2;
+
+	return true;
+}
+
 void vc_handler(struct pt_regs *regs)
 {
 	u64 exit_code = regs->orig_ax;
@@ -257,6 +294,9 @@ void vc_handler(struct pt_regs *regs)
 	switch (exit_code) {
 	case SVM_EXIT_IOIO:
 		handled = handle_ioio(regs);
+		break;
+	case SVM_EXIT_CPUID:
+		handled = handle_cpuid(regs);
 		break;
 	default:
 		handled = false;
