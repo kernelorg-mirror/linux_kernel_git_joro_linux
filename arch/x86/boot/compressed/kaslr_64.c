@@ -20,6 +20,7 @@
 #undef CONFIG_PAGE_TABLE_ISOLATION
 
 #include "misc.h"
+#include "sev-es.h"
 
 /* These actually do the work of building the kernel identity maps. */
 #include <asm/init.h>
@@ -152,5 +153,12 @@ void add_identity_map(unsigned long start, unsigned long size)
  */
 void finalize_identity_maps(void)
 {
+	/*
+	 * We are about to switch to a new page-table. This will wipe out the
+	 * existing mapping for the GHCB. Make sure the #VC handler will map it
+	 * again on its next invocation.
+	 */
+	reset_ghcb();
+
 	write_cr3(top_level_pgt);
 }

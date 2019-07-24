@@ -122,6 +122,11 @@ static bool setup_ghcb(void)
 	return true;
 }
 
+void reset_ghcb(void)
+{
+	ghcb = NULL;
+}
+
 void vc_handler(struct pt_regs *regs)
 {
 	/* Make sure the GHCB is initialized */
