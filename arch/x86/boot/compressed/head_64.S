@@ -591,10 +591,20 @@ relocated:
 	shrq	$3, %rcx
 	rep	stosq
 
+	/*
+	 * Reload the GDT after the kernel has been relocated. The old
+	 * location of the GDT is about to be overwritten by
+	 * extract_kernel().
+	 */
+	leaq	gdt(%rip), %rax
+	movq	%rax, gdt64+2(%rip)
+	lgdt	gdt64(%rip)
+
 #ifdef CONFIG_AMD_SEV_ES_GUEST
 	/* Re-install IDT after relocation */
 	call install_boot_idt
 #endif
+
 /*
  * Do the extraction, and jump to the new kernel..
  */
