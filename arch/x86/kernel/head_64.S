@@ -73,9 +73,6 @@ startup_64:
 	/* Set up the stack for verify_cpu(), similar to initial_stack below */
 	leaq	(__end_init_task - SIZEOF_PTREGS)(%rip), %rsp
 
-	/* Sanitize CPU configuration */
-	call verify_cpu
-
 	/*
 	 * Perform pagetable fixups. Additionally, if SME is active, encrypt
 	 * the kernel and retrieve the modifier (SME encryption mask if SME
@@ -114,9 +111,6 @@ ENTRY(secondary_startup_64)
 	 * to have any identity mapped pages in the kernel page table
 	 * after the boot processor executes this code.
 	 */
-
-	/* Sanitize CPU configuration */
-	call verify_cpu
 
 	/*
 	 * Retrieve the modifier (SME encryption mask if SME is active) to be
@@ -193,6 +187,9 @@ ENTRY(secondary_startup_64)
 
 	/* Load IDT - from here on we can handle exceptions */
 	lidt	idt_descr(%rip)
+
+	/* Sanitize CPU configuration */
+	call	verify_cpu
 
 	/* Check if nx is implemented */
 	movl	$0x80000001, %eax
