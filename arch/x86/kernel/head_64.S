@@ -156,30 +156,6 @@ ENTRY(secondary_startup_64)
 	 */
 	lgdt	early_gdt_descr(%rip)
 
-	/* Check if nx is implemented */
-	movl	$0x80000001, %eax
-	cpuid
-	movl	%edx,%edi
-
-	/* Setup EFER (Extended Feature Enable Register) */
-	movl	$MSR_EFER, %ecx
-	rdmsr
-	btsl	$_EFER_SCE, %eax	/* Enable System Call */
-	btl	$20,%edi		/* No Execute supported? */
-	jnc     1f
-	btsl	$_EFER_NX, %eax
-	btsq	$_PAGE_BIT_NX,early_pmd_flags(%rip)
-1:	wrmsr				/* Make changes effective */
-
-	/* Setup cr0 */
-	movl	$CR0_STATE, %eax
-	/* Make changes effective */
-	movq	%rax, %cr0
-
-	/* zero EFLAGS after setting rsp */
-	pushq $0
-	popfq
-
 	/* set up data segments */
 	xorl %eax,%eax
 	movl %eax,%ds
@@ -205,6 +181,30 @@ ENTRY(secondary_startup_64)
 	movl	initial_gs(%rip),%eax
 	movl	initial_gs+4(%rip),%edx
 	wrmsr
+
+	/* Check if nx is implemented */
+	movl	$0x80000001, %eax
+	cpuid
+	movl	%edx,%edi
+
+	/* Setup EFER (Extended Feature Enable Register) */
+	movl	$MSR_EFER, %ecx
+	rdmsr
+	btsl	$_EFER_SCE, %eax	/* Enable System Call */
+	btl	$20,%edi		/* No Execute supported? */
+	jnc     1f
+	btsl	$_EFER_NX, %eax
+	btsq	$_PAGE_BIT_NX,early_pmd_flags(%rip)
+1:	wrmsr				/* Make changes effective */
+
+	/* Setup cr0 */
+	movl	$CR0_STATE, %eax
+	/* Make changes effective */
+	movq	%rax, %cr0
+
+	/* zero EFLAGS after setting rsp */
+	pushq $0
+	popfq
 
 	/* rsi is pointer to real mode structure with interesting info.
 	   pass it to C */
