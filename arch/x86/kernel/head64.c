@@ -438,8 +438,6 @@ asmlinkage __visible void __init x86_64_start_kernel(char * real_mode_data)
 
 	kasan_early_init();
 
-	idt_setup_early_handler();
-
 	copy_bootdata(__va(real_mode_data));
 
 	/*
@@ -470,4 +468,13 @@ void __init x86_64_start_reservations(char *real_mode_data)
 	}
 
 	start_kernel();
+}
+
+extern void __head early_idt_init(gate_desc *idt);
+
+void __head early_idt_setup(unsigned long physaddr)
+{
+	gate_desc *idt = fixup_pointer(idt_table, physaddr);
+
+	early_idt_init(idt);
 }

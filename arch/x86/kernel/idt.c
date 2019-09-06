@@ -227,7 +227,7 @@ idt_setup_from_table(gate_desc *idt, const struct idt_data *t, int size, bool sy
 	}
 }
 
-static void set_intr_gate(unsigned int n, const void *addr)
+static void __set_intr_gate(gate_desc *idt, unsigned int n, const void *addr)
 {
 	struct idt_data data;
 
@@ -240,7 +240,12 @@ static void set_intr_gate(unsigned int n, const void *addr)
 	data.bits.type	= GATE_INTERRUPT;
 	data.bits.p	= 1;
 
-	idt_setup_from_table(idt_table, &data, 1, false);
+	idt_setup_from_table(idt, &data, 1, false);
+}
+
+static void set_intr_gate(unsigned int n, const void *addr)
+{
+	__set_intr_gate(idt_table, n, addr);
 }
 
 /**
@@ -328,6 +333,14 @@ void __init idt_setup_apic_and_irq_gates(void)
 /**
  * idt_setup_early_handler - Initializes the idt table with early handlers
  */
+void __init early_idt_init(gate_desc *idt)
+{
+	int i;
+
+	for (i = 0; i < NUM_EXCEPTION_VECTORS; i++)
+		__set_intr_gate(idt, i, early_idt_handler_array[i]);
+}
+
 void __init idt_setup_early_handler(void)
 {
 	int i;

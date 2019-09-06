@@ -87,6 +87,15 @@ startup_64:
 	call	__startup_64
 	popq	%rsi
 
+	/*
+	 * Setup the IDT here so we can handle early exceptions in
+	 * SEV-ES guests.
+	 */
+	leaq	_text(%rip), %rdi
+	pushq	%rsi
+	call	early_idt_setup
+	popq	%rsi
+
 	/* Form the CR3 value being sure to include the CR3 modifier */
 	addq	$(early_top_pgt - __START_KERNEL_map), %rax
 	jmp 1f
@@ -181,6 +190,9 @@ ENTRY(secondary_startup_64)
 	movl	initial_gs(%rip),%eax
 	movl	initial_gs+4(%rip),%edx
 	wrmsr
+
+	/* Load IDT - from here on we can handle exceptions */
+	lidt	idt_descr(%rip)
 
 	/* Check if nx is implemented */
 	movl	$0x80000001, %eax
