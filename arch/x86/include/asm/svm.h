@@ -333,4 +333,77 @@ struct __attribute__ ((__packed__)) vmcb {
 
 #define SVM_CR0_SELECTIVE_MASK (X86_CR0_TS | X86_CR0_MP)
 
+/* GHCB Accessor functions */
+
+#define DEFINE_GHCB_IS_VALID(field)					\
+	static inline bool ghcb_valid_##field(struct ghcb *ghcb)	\
+        {								\
+                u16 idx = offsetof(struct vmcb_save_area, field) / 8;	\
+                u16 byte_idx  = idx / 8;				\
+                u16 bit_idx   = idx % 8;				\
+                return !!((ghcb)->save.valid_bitmap[byte_idx]		\
+					& (1 << bit_idx));		\
+        }
+
+DEFINE_GHCB_IS_VALID(rsp)
+DEFINE_GHCB_IS_VALID(rax)
+DEFINE_GHCB_IS_VALID(rcx)
+DEFINE_GHCB_IS_VALID(rdx)
+DEFINE_GHCB_IS_VALID(rbx)
+DEFINE_GHCB_IS_VALID(rbp)
+DEFINE_GHCB_IS_VALID(rsi)
+DEFINE_GHCB_IS_VALID(rdi)
+DEFINE_GHCB_IS_VALID(r8)
+DEFINE_GHCB_IS_VALID(r9)
+DEFINE_GHCB_IS_VALID(r10)
+DEFINE_GHCB_IS_VALID(r11)
+DEFINE_GHCB_IS_VALID(r12)
+DEFINE_GHCB_IS_VALID(r13)
+DEFINE_GHCB_IS_VALID(r14)
+DEFINE_GHCB_IS_VALID(r15)
+DEFINE_GHCB_IS_VALID(sw_exit_code)
+DEFINE_GHCB_IS_VALID(sw_exit_info_1)
+DEFINE_GHCB_IS_VALID(sw_exit_info_2)
+DEFINE_GHCB_IS_VALID(sw_scratch)
+DEFINE_GHCB_IS_VALID(xcr0)
+
+#define GHCB_SET_VALID(ghcb, field)					\
+        {								\
+                u16 idx = offsetof(struct vmcb_save_area, field) / 8;	\
+                u16 byte_idx  = idx / 8;				\
+                u16 bit_idx   = idx % 8;				\
+                (ghcb)->save.valid_bitmap[byte_idx] |= (1 << bit_idx);	\
+        }
+
+#define DEFINE_GHCB_ACCESSOR(field)			\
+	static inline void				\
+	ghcb_set_##field(struct ghcb *ghcb, u64 value)	\
+	{						\
+		GHCB_SET_VALID(ghcb, field)		\
+		(ghcb)->save.field = value;		\
+	}
+
+
+DEFINE_GHCB_ACCESSOR(rsp)
+DEFINE_GHCB_ACCESSOR(rax)
+DEFINE_GHCB_ACCESSOR(rcx)
+DEFINE_GHCB_ACCESSOR(rdx)
+DEFINE_GHCB_ACCESSOR(rbx)
+DEFINE_GHCB_ACCESSOR(rbp)
+DEFINE_GHCB_ACCESSOR(rsi)
+DEFINE_GHCB_ACCESSOR(rdi)
+DEFINE_GHCB_ACCESSOR(r8)
+DEFINE_GHCB_ACCESSOR(r9)
+DEFINE_GHCB_ACCESSOR(r10)
+DEFINE_GHCB_ACCESSOR(r11)
+DEFINE_GHCB_ACCESSOR(r12)
+DEFINE_GHCB_ACCESSOR(r13)
+DEFINE_GHCB_ACCESSOR(r14)
+DEFINE_GHCB_ACCESSOR(r15)
+DEFINE_GHCB_ACCESSOR(sw_exit_code)
+DEFINE_GHCB_ACCESSOR(sw_exit_info_1)
+DEFINE_GHCB_ACCESSOR(sw_exit_info_2)
+DEFINE_GHCB_ACCESSOR(sw_scratch)
+DEFINE_GHCB_ACCESSOR(xcr0)
+
 #endif
