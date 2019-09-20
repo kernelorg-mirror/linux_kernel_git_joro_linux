@@ -134,6 +134,35 @@ static phys_addr_t es_slow_virt_to_phys(struct ghcb *ghcb, long vaddr)
 /* Include code shared with pre-decompression boot stage */
 #include "encrypted-state-early.c"
 
+static enum es_result handle_msr(struct ghcb *ghcb, struct es_em_ctxt *ctxt)
+{
+	struct pt_regs *regs = ctxt->regs;
+	enum es_result ret;
+	bool write;
+	u64 exit_info_1;
+
+	write = (ctxt->insn.opcode.bytes[1] == 0x30);
+
+	ghcb_set_rcx(ghcb, lower_bits(regs->cx, 32));
+	if (write) {
+		ghcb_set_rax(ghcb, lower_bits(regs->ax, 32));
+		ghcb_set_rdx(ghcb, lower_bits(regs->dx, 32));
+		exit_info_1 = 1;
+	} else {
+		exit_info_1 = 0;
+	}
+
+	ret = ghcb_hv_call(ghcb, ctxt, SVM_EXIT_MSR, exit_info_1, 0);
+	if (ret != ES_OK)
+		return ret;
+	else if (!write) {
+		regs->ax = copy_lower_bits(regs->ax, ghcb->save.rax, 32);
+		regs->dx = copy_lower_bits(regs->dx, ghcb->save.rdx, 32);
+	}
+
+	return ret;
+}
+
 static bool __init setup_ghcb(void)
 {
 	/*
@@ -203,6 +232,9 @@ static enum es_result handle_vc_exception(struct es_em_ctxt *ctxt,
 		break;
 	case SVM_EXIT_IOIO:
 		result = handle_ioio(ghcb, ctxt);
+		break;
+	case SVM_EXIT_MSR:
+		result = handle_msr(ghcb, ctxt);
 		break;
 	case SVM_EXIT_NPF:
 		result = handle_mmio(ghcb, ctxt);
