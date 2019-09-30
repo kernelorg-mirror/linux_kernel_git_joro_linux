@@ -104,6 +104,9 @@ void boot_vc_handler(struct pt_regs *regs)
 	ghcb_invalidate(boot_ghcb);
 
 	switch (exit_code) {
+	case SVM_EXIT_IOIO:
+		result = handle_ioio(boot_ghcb, &ctxt);
+		break;
 	default:
 		result = ES_UNSUPPORTED;
 		break;
