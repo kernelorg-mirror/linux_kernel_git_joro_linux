@@ -22,6 +22,8 @@
 #include <asm/traps.h>
 #include <asm/svm.h>
 
+#define DR7_RESET_VALUE        0x400
+
 /* For early boot hypervisor communication in SEV-ES enabled guests */
 struct ghcb boot_ghcb_page __bss_decrypted __aligned(PAGE_SIZE);
 
@@ -30,6 +32,9 @@ struct ghcb boot_ghcb_page __bss_decrypted __aligned(PAGE_SIZE);
  * cleared
  */
 struct ghcb __initdata *boot_ghcb;
+static DEFINE_PER_CPU(unsigned long, cached_dr7) = DR7_RESET_VALUE;
+/* Needed before per-cpu access is set up */
+static unsigned long early_dr7 = DR7_RESET_VALUE;
 
 struct ghcb_state {
 	struct ghcb *ghcb;
@@ -263,13 +268,69 @@ static void __init vc_early_vc_forward_exception(struct es_em_ctxt *ctxt)
 	early_exception(ctxt->regs, trapnr);
 }
 
+static enum es_result vc_handle_dr7_write(struct ghcb *ghcb,
+					  struct es_em_ctxt *ctxt,
+					  bool early)
+{
+	u8 rm = X86_MODRM_RM(ctxt->insn.modrm.value);
+	unsigned long *reg;
+	enum es_result ret;
+
+	if (ctxt->insn.rex_prefix.nbytes &&
+	    X86_REX_B(ctxt->insn.rex_prefix.value))
+		rm |= 0x8;
+
+	reg = vc_register_from_idx(ctxt->regs, rm);
+
+	/* Using a value of 0 for ExitInfo1 means RAX holds the value */
+	ghcb_set_rax(ghcb, *reg);
+	ret = sev_es_ghcb_hv_call(ghcb, ctxt, SVM_EXIT_WRITE_DR7, 0, 0);
+	if (ret != ES_OK)
+		return ret;
+
+	if (early)
+		early_dr7 = *reg;
+	else
+		this_cpu_write(cached_dr7, *reg);
+
+	return ES_OK;
+}
+
+static enum es_result vc_handle_dr7_read(struct ghcb *ghcb,
+					 struct es_em_ctxt *ctxt,
+					 bool early)
+{
+	u8 rm = X86_MODRM_RM(ctxt->insn.modrm.value);
+	unsigned long *reg;
+
+	if (ctxt->insn.rex_prefix.nbytes &&
+	    X86_REX_B(ctxt->insn.rex_prefix.value))
+		rm |= 0x8;
+
+	reg = vc_register_from_idx(ctxt->regs, rm);
+
+	if (early)
+		*reg = early_dr7;
+	else
+		*reg = this_cpu_read(cached_dr7);
+
+	return ES_OK;
+}
+
 static enum es_result vc_handle_exitcode(struct es_em_ctxt *ctxt,
-		struct ghcb *ghcb,
-		unsigned long exit_code)
+					 struct ghcb *ghcb,
+					 unsigned long exit_code,
+					 bool early)
 {
 	enum es_result result;
 
 	switch (exit_code) {
+	case SVM_EXIT_READ_DR7:
+		result = vc_handle_dr7_read(ghcb, ctxt, early);
+		break;
+	case SVM_EXIT_WRITE_DR7:
+		result = vc_handle_dr7_write(ghcb, ctxt, early);
+		break;
 	case SVM_EXIT_CPUID:
 		result = vc_handle_cpuid(ghcb, ctxt);
 		break;
@@ -358,7 +419,7 @@ dotraplinkage void do_vmm_communication(struct pt_regs *regs, unsigned long exit
 		result = vc_context_filter(regs, exit_code);
 
 	if (result == ES_OK)
-		result = vc_handle_exitcode(&ctxt, ghcb, exit_code);
+		result = vc_handle_exitcode(&ctxt, ghcb, exit_code, false);
 
 	sev_es_put_ghcb(&state);
 
@@ -426,7 +487,7 @@ bool __init boot_vc_exception(struct pt_regs *regs)
 	result = vc_init_em_ctxt(&ctxt, regs, exit_code);
 
 	if (result == ES_OK)
-		result = vc_handle_exitcode(&ctxt, boot_ghcb, exit_code);
+		result = vc_handle_exitcode(&ctxt, boot_ghcb, exit_code, true);
 
 	/* Done - now check the result */
 	switch (result) {
