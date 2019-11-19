@@ -274,6 +274,12 @@ static enum es_result handle_dr7_read(struct ghcb *ghcb,
 	return ES_OK;
 }
 
+static enum es_result handle_wbinvd(struct ghcb *ghcb,
+				    struct es_em_ctxt *ctxt)
+{
+	return ghcb_hv_call(ghcb, ctxt, SVM_EXIT_WBINVD, 0, 0);
+}
+
 static enum es_result handle_vc_exception(struct es_em_ctxt *ctxt,
 					  struct ghcb *ghcb,
 					  unsigned long exit_code,
@@ -296,6 +302,9 @@ static enum es_result handle_vc_exception(struct es_em_ctxt *ctxt,
 		break;
 	case SVM_EXIT_MSR:
 		result = handle_msr(ghcb, ctxt);
+		break;
+	case SVM_EXIT_WBINVD:
+		result = handle_wbinvd(ghcb, ctxt);
 		break;
 	case SVM_EXIT_NPF:
 		result = handle_mmio(ghcb, ctxt);
