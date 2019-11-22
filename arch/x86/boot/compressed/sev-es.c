@@ -67,6 +67,11 @@ static enum es_result vc_read_mem(struct es_em_ctxt *ctxt,
 	return ES_OK;
 }
 
+static phys_addr_t vc_slow_virt_to_phys(struct ghcb *ghcb, long vaddr)
+{
+	return (phys_addr_t)vaddr;
+}
+
 #undef __init
 #undef __pa
 #define __init
@@ -119,6 +124,9 @@ void boot_vc_handler(struct pt_regs *regs, unsigned long exit_code)
 		break;
 	case SVM_EXIT_CPUID:
 		result = vc_handle_cpuid(boot_ghcb, &ctxt);
+		break;
+	case SVM_EXIT_NPF:
+		result = vc_handle_mmio(boot_ghcb, &ctxt);
 		break;
 	default:
 		result = ES_UNSUPPORTED;
