@@ -8,8 +8,11 @@
  */
 
 #include <linux/sched/debug.h>	/* For show_regs() */
-#include <linux/kernel.h>
+#include <linux/percpu-defs.h>
+#include <linux/mem_encrypt.h>
 #include <linux/printk.h>
+#include <linux/set_memory.h>
+#include <linux/kernel.h>
 #include <linux/mm.h>
 
 #include <asm/trap_defs.h>
@@ -27,6 +30,9 @@ struct ghcb boot_ghcb_page __bss_decrypted __aligned(PAGE_SIZE);
  * cleared
  */
 struct ghcb __initdata *boot_ghcb;
+
+/* Runtime GHCBs */
+static DEFINE_PER_CPU_DECRYPTED(struct ghcb, ghcb_page) __aligned(PAGE_SIZE);
 
 /* Needed in early_forward_exception */
 extern void early_exception(struct pt_regs *regs, int trapnr);
@@ -131,6 +137,23 @@ static bool __init setup_ghcb(void)
 	boot_ghcb = &boot_ghcb_page;
 
 	return true;
+}
+
+void encrypted_state_init_ghcbs(void)
+{
+	int cpu;
+
+	if (!sev_es_active())
+		return;
+
+	/* Initialize per-cpu GHCB pages */
+	for_each_possible_cpu(cpu) {
+		struct ghcb *ghcb = &per_cpu(ghcb_page, cpu);
+
+		set_memory_decrypted((unsigned long)ghcb,
+				     sizeof(ghcb_page) >> PAGE_SHIFT);
+		memset(ghcb, 0, sizeof(*ghcb));
+	}
 }
 
 static void __init early_forward_exception(struct es_em_ctxt *ctxt)
