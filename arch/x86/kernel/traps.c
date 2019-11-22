@@ -931,6 +931,9 @@ void __init trap_init(void)
 	/* Init cpu_entry_area before IST entries are set up */
 	setup_cpu_entry_areas();
 
+	/* Init GHCB memory pages when running as an SEV-ES guest */
+	encrypted_state_init_ghcbs();
+
 	idt_setup_traps();
 
 	/*
