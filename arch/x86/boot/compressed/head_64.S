@@ -33,6 +33,7 @@
 #include <asm/processor-flags.h>
 #include <asm/asm-offsets.h>
 #include <asm/bootparam.h>
+#include <asm/desc_defs.h>
 #include "pgtable.h"
 
 /*
@@ -358,6 +359,10 @@ SYM_CODE_START(startup_64)
 	movq	%rax, gdt64+2(%rip)
 	lgdt	gdt64(%rip)
 
+	pushq	%rsi
+	call	load_stage1_idt
+	popq	%rsi
+
 	/*
 	 * paging_prepare() sets up the trampoline and checks if we need to
 	 * enable 5-level paging.
@@ -466,6 +471,16 @@ SYM_FUNC_END_ALIAS(efi_stub_entry)
 SYM_FUNC_START_LOCAL_NOALIGN(.Lrelocated)
 
 /*
+ * Reload GDT after relocation - The GDT at the non-relocated position
+ * might be overwritten soon by the in-place decompression, so reload
+ * GDT at the relocated address. The GDT is referenced by exception
+ * handling and needs to be set up correctly.
+ */
+	leaq	gdt(%rip), %rax
+	movq	%rax, gdt64+2(%rip)
+	lgdt	gdt64(%rip)
+
+/*
  * Clear BSS (stack is currently empty)
  */
 	xorl	%eax, %eax
@@ -474,6 +489,13 @@ SYM_FUNC_START_LOCAL_NOALIGN(.Lrelocated)
 	subq	%rdi, %rcx
 	shrq	$3, %rcx
 	rep	stosq
+
+/*
+ * Load stage2 IDT
+ */
+	pushq	%rsi
+	call	load_stage2_idt
+	popq	%rsi
 
 /*
  * Do the extraction, and jump to the new kernel..
@@ -627,6 +649,18 @@ SYM_DATA_START_LOCAL(gdt)
 	.quad	0x0080890000000000	/* TS descriptor */
 	.quad   0x0000000000000000	/* TS continued */
 SYM_DATA_END_LABEL(gdt, SYM_L_LOCAL, gdt_end)
+
+SYM_DATA_START(boot_idt_desc)
+	.word	boot_idt_end - boot_idt
+	.quad	0
+SYM_DATA_END(boot_idt_desc)
+	.balign 8
+SYM_DATA_START(boot_idt)
+	.rept	BOOT_IDT_ENTRIES
+	.quad	0
+	.quad	0
+	.endr
+SYM_DATA_END_LABEL(boot_idt, SYM_L_GLOBAL, boot_idt_end)
 
 #ifdef CONFIG_EFI_MIXED
 SYM_DATA_LOCAL(efi32_boot_args, .long 0, 0)
