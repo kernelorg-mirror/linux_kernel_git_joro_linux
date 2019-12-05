@@ -36,6 +36,9 @@
 #define memptr unsigned
 #endif
 
+/* Linker Symbols */
+extern char _head[], _end[];
+
 /* misc.c */
 extern memptr free_mem_ptr;
 extern memptr free_mem_end_ptr;
