@@ -69,3 +69,5 @@ SYM_FUNC_END(\name)
 
 	.text
 	.code64
+
+EXCEPTION_HANDLER	boot_pf_handler do_boot_page_fault error_code=1
