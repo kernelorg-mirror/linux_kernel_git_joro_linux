@@ -6,6 +6,8 @@
 extern gate_desc boot_idt[BOOT_IDT_ENTRIES];
 extern struct desc_ptr boot_idt_desc;
 
+void boot_pf_handler(void);
+
 static void set_idt_entry(int vector, void (*handler)(void))
 {
 	unsigned long address = (unsigned long)handler;
@@ -41,6 +43,8 @@ void load_stage1_idt(void)
 void load_stage2_idt(void)
 {
 	boot_idt_desc.address = (unsigned long)boot_idt;
+
+	set_idt_entry(X86_TRAP_PF, boot_pf_handler);
 
 	load_boot_idt(&boot_idt_desc);
 }

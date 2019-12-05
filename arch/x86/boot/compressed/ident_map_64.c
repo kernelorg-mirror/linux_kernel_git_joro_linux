@@ -19,11 +19,13 @@
 /* No PAGE_TABLE_ISOLATION support needed either: */
 #undef CONFIG_PAGE_TABLE_ISOLATION
 
+#include "error.h"
 #include "misc.h"
 
 /* These actually do the work of building the kernel identity maps. */
 #include <asm/init.h>
 #include <asm/pgtable.h>
+#include <asm/trap_defs.h>
 /* Use the static base for this part of the boot process */
 #undef __PAGE_OFFSET
 #define __PAGE_OFFSET __PAGE_OFFSET_BASE
@@ -153,4 +155,39 @@ void add_identity_map(unsigned long start, unsigned long size)
 void finalize_identity_maps(void)
 {
 	write_cr3(top_level_pgt);
+}
+
+static void pf_error(const char *reason, unsigned long address,
+		     struct pt_regs *regs)
+{
+	debug_putstr("Unexpected page-fault: ");
+	debug_putstr(reason);
+	debug_putstr("\nCR2: 0x");
+	debug_putaddr(address);
+	debug_putstr("\nRIP releative to _head: 0x");
+	debug_putaddr(regs->ip - (unsigned long)_head);
+	debug_putstr("\n");
+
+	error("Can't continue after unexpected page-fault\n");
+}
+
+void do_page_fault(struct pt_regs *regs)
+{
+	unsigned long address = native_read_cr2();
+	unsigned long error_code = regs->orig_ax;
+
+	if (error_code & X86_PF_PROT)
+		pf_error("Fault on present page", address, regs);
+
+	if (error_code & X86_PF_USER)
+		pf_error("User fault", address, regs);
+
+	if (error_code & X86_PF_RSVD)
+		pf_error("Reserved bits set", address, regs);
+
+	/*
+	 * Error code is sane - now identity map the 2M region around
+	 * the faulting address.
+	 */
+	add_identity_map(address & PMD_MASK, PMD_SIZE);
 }
