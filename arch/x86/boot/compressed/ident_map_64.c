@@ -84,7 +84,7 @@ static struct x86_mapping_info mapping_info;
  * Once all ranges have been added, the new mapping is activated by calling
  * finalize_identity_maps() below.
  */
-void add_identity_map(unsigned long start, unsigned long size)
+static void add_identity_map(unsigned long start, unsigned long size)
 {
 	unsigned long end = start + size;
 
@@ -153,16 +153,6 @@ void initialize_identity_maps(void)
 	start = (unsigned long)_head;
 	size  = _end - _head;
 	add_identity_map(start, size);
-	write_cr3(top_level_pgt);
-}
-
-/*
- * This switches the page tables to the new level4 that has been built
- * via calls to add_identity_map() above. If booted via startup_32(),
- * this is effectively a no-op.
- */
-void finalize_identity_maps(void)
-{
 	write_cr3(top_level_pgt);
 }
 
