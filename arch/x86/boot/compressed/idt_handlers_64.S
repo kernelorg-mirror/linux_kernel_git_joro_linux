@@ -78,4 +78,5 @@ EXCEPTION_HANDLER	boot_pf_handler do_boot_page_fault error_code=1
 
 #ifdef CONFIG_AMD_MEM_ENCRYPT
 EXCEPTION_HANDLER	boot_stage1_vc_handler vc_no_ghcb_handler error_code=1
+EXCEPTION_HANDLER	boot_stage2_vc_handler boot_vc_handler error_code=1
 #endif
