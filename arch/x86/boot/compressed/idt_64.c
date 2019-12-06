@@ -7,6 +7,7 @@ extern gate_desc boot_idt[BOOT_IDT_ENTRIES];
 extern struct desc_ptr boot_idt_desc;
 
 void boot_pf_handler(void);
+void boot_stage1_vc_handler(void);
 
 static void set_idt_entry(int vector, void (*handler)(void))
 {
@@ -35,6 +36,10 @@ static void load_boot_idt(const struct desc_ptr *dtr)
 void load_stage1_idt(void)
 {
 	boot_idt_desc.address = (unsigned long)boot_idt;
+
+#ifdef CONFIG_AMD_MEM_ENCRYPT
+	set_idt_entry(X86_TRAP_VC, boot_stage1_vc_handler);
+#endif
 
 	load_boot_idt(&boot_idt_desc);
 }
