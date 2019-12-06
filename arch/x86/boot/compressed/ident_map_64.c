@@ -104,9 +104,6 @@ void initialize_identity_maps(void)
 {
 	unsigned long start, size;
 
-	/* If running as an SEV guest, the encryption mask is required. */
-	set_sev_encryption_mask();
-
 	/* Exclude the encryption mask from __PHYSICAL_MASK */
 	physical_mask &= ~sme_me_mask;
 
