@@ -26,6 +26,7 @@
 #include <asm/init.h>
 #include <asm/pgtable.h>
 #include <asm/trap_defs.h>
+#include <asm/cmpxchg.h>
 /* Use the static base for this part of the boot process */
 #undef __PAGE_OFFSET
 #define __PAGE_OFFSET __PAGE_OFFSET_BASE
@@ -155,6 +156,105 @@ void initialize_identity_maps(void)
 	size  = _end - _head;
 	add_identity_map(start, size);
 	write_cr3(top_level_pgt);
+}
+
+static pte_t* split_large_pmd(struct x86_mapping_info *info, pmd_t *pmdp,
+			   unsigned long __address)
+{
+	unsigned long page_flags;
+	unsigned long address;
+	pte_t *pte;
+	pmd_t pmd;
+	int i;
+
+	pte = (pte_t *)info->alloc_pgt_page(info->context);
+	if (!pte)
+		return NULL;
+
+	address     = __address & PMD_MASK;
+	/* No large page - clear PSE flag */
+	page_flags  = info->page_flag & ~_PAGE_PSE;
+
+	/* Populate the PTEs */
+	for (i = 0; i < PTRS_PER_PMD; i++) {
+		set_pte(&pte[i], __pte(address | page_flags));
+		address += PAGE_SIZE;
+	}
+
+	/*
+	 * Ideally we need to clear the large PMD first and do a TLB
+	 * flush before we write the new PMD. But the 2M range of the
+	 * PMD might contain the code we execute and/or the stack
+	 * we are on, so we can't do that. But that should be safe here
+	 * because we are going from large to small mappings and we are
+	 * also the only user of the page-table, so there is no chance
+	 * of a TLB multihit in the slight time window between set_pmd()
+	 * and write_cr3().
+	 */
+	pmd = __pmd((unsigned long)pte | info->kernpg_flag);
+	set_pmd(pmdp, pmd);
+
+	/* Flush TLB */
+	write_cr3(top_level_pgt);
+
+	return pte + pte_index(__address);
+}
+
+static int __set_page_decrypted(struct x86_mapping_info *info,
+				unsigned long address)
+{
+	unsigned long scratch, *target;
+	pgd_t *pgdp = (pgd_t *)top_level_pgt;
+	p4d_t *p4dp;
+	pud_t *pudp;
+	pmd_t *pmdp;
+	pte_t *ptep, pte;
+
+	/*
+	 * First make sure there is a PMD mapping for 'address'.
+	 * It should already exists, but keep things generic.
+	 *
+	 * To map the page we just read from it to fault it in. We can't
+	 * call add_identity_map() here because that would
+	 * unconditionally map the address on PMD level, destroying any
+	 * PTE-level mappings that might already exist.  Also do
+	 * something useless with 'scratch' so the access won't be
+	 * optimized away.
+	 */
+	target = (unsigned long *)address;
+	scratch = *target;
+	arch_cmpxchg(target, scratch, scratch);
+
+	/*
+	 * We know page is mapped at least with PMD size - so skip
+	 * checks and walk directly to the PMD.
+	 */
+	p4dp = p4d_offset(pgdp, address);
+	pudp = pud_offset(p4dp, address);
+	pmdp = pmd_offset(pudp, address);
+
+	if (pmd_large(*pmdp))
+		ptep = split_large_pmd(info, pmdp, address);
+	else
+		ptep = pte_offset_kernel(pmdp, address);
+
+	if (!ptep)
+		return -ENOMEM;
+
+
+	/* Clear encryption flag and write new pte */
+	pte = pte_clear_flags(*ptep, _PAGE_ENC);
+	set_pte(ptep, pte);
+
+	/* Flush TLB */
+	write_cr3(top_level_pgt);
+
+	return 0;
+}
+
+int set_page_decrypted(unsigned long address)
+{
+	return __set_page_decrypted(&mapping_info, address);
 }
 
 static void pf_error(const char *reason, unsigned long address,
