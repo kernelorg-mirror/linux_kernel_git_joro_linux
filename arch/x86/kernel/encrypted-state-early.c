@@ -9,7 +9,7 @@
  * and is included directly into both code-bases.
  */
 
-static void terminate(unsigned reason)
+static void __maybe_unused terminate(unsigned reason)
 {
 	/* Request Guest Termination from Hypvervisor */
 	write_ghcb_msr(GHCB_SEV_TERMINATE);
@@ -19,7 +19,7 @@ static void terminate(unsigned reason)
 		asm volatile("hlt\n");
 }
 
-static bool sev_es_negotiate_protocol(void)
+static bool __maybe_unused sev_es_negotiate_protocol(void)
 {
 	u64 val;
 
@@ -38,7 +38,7 @@ static bool sev_es_negotiate_protocol(void)
 	return true;
 }
 
-static void ghcb_invalidate(struct ghcb *ghcb)
+static void __maybe_unused ghcb_invalidate(struct ghcb *ghcb)
 {
 	memset(ghcb->save.valid_bitmap, 0, sizeof(ghcb->save.valid_bitmap));
 }
@@ -73,8 +73,9 @@ static enum es_result decode_insn(struct es_em_ctxt *ctxt)
 	return ret;
 }
 
-static enum es_result init_em_ctxt(struct es_em_ctxt *ctxt,
-				   struct pt_regs *regs)
+static enum es_result __maybe_unused
+init_em_ctxt(struct es_em_ctxt *ctxt,
+	     struct pt_regs *regs)
 {
 	memset(ctxt, 0, sizeof(*ctxt));
 	ctxt->regs = regs;
@@ -82,7 +83,7 @@ static enum es_result init_em_ctxt(struct es_em_ctxt *ctxt,
 	return decode_insn(ctxt);
 }
 
-static void finish_insn(struct es_em_ctxt *ctxt)
+static void __maybe_unused finish_insn(struct es_em_ctxt *ctxt)
 {
 	ctxt->regs->ip += ctxt->insn.length;
 }
@@ -560,7 +561,8 @@ static enum es_result do_mmio(struct ghcb *ghcb, struct es_em_ctxt *ctxt,
 	return ghcb_hv_call(ghcb, ctxt, exit_code, exit_info_1, exit_info_2);
 }
 
-static enum es_result handle_mmio(struct ghcb *ghcb, struct es_em_ctxt *ctxt)
+static enum es_result __maybe_unused
+handle_mmio(struct ghcb *ghcb, struct es_em_ctxt *ctxt)
 {
 	struct insn *insn = &ctxt->insn;
 	unsigned int bytes = 0;
