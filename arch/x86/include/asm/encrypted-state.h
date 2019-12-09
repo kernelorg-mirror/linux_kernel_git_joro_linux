@@ -76,4 +76,6 @@ static inline u64 copy_lower_bits(u64 out, u64 in, unsigned bits)
 	return out;
 }
 
+extern void early_vc_handler(void);
+
 #endif
