@@ -11,6 +11,7 @@
 #include <asm/desc.h>
 #include <asm/hw_irq.h>
 #include <asm/setup.h>
+#include <asm/sev-es.h>
 
 struct idt_data {
 	unsigned int	vector;
@@ -407,4 +408,39 @@ void __init early_idt_setup_early_handler(unsigned long physaddr)
 void early_load_idt(void)
 {
 	load_idt(&idt_descr);
+}
+
+#ifdef CONFIG_AMD_MEM_ENCRYPT
+static void set_early_idt_handler(gate_desc *idt, int n, void *handler)
+{
+	struct idt_data data;
+	gate_desc desc;
+
+	init_idt_data(&data, n, handler);
+	idt_init_desc(&desc, &data);
+	native_write_idt_entry(idt, n, &desc);
+}
+#endif
+
+static struct desc_ptr early_idt_descr __initdata = {
+	.size		= IDT_TABLE_SIZE - 1,
+	.address	= 0 /* Needs physical address of idt_table - initialized at runtime. */,
+};
+
+void __init early_idt_setup(unsigned long physbase)
+{
+	void __maybe_unused *handler;
+	gate_desc *idt;
+
+	idt = fixup_pointer(idt_table, physbase);
+
+#ifdef CONFIG_AMD_MEM_ENCRYPT
+	/* VMM Communication Exception */
+	handler = fixup_pointer(vc_no_ghcb, physbase);
+	set_early_idt_handler(idt, X86_TRAP_VC, handler);
+#endif
+
+	/* Initialize IDT descriptor and load IDT */
+	early_idt_descr.address = (unsigned long)idt;
+	native_load_idt(&early_idt_descr);
 }

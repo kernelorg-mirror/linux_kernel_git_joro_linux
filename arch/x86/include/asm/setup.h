@@ -52,6 +52,7 @@ extern void startup_64_setup_env(unsigned long physbase);
 extern int early_make_pgtable(unsigned long address);
 extern void early_idt_setup_early_handler(unsigned long physaddr);
 extern void early_load_idt(void);
+extern void early_idt_setup(unsigned long physbase);
 
 #ifdef CONFIG_X86_INTEL_MID
 extern void x86_intel_mid_early_setup(void);
