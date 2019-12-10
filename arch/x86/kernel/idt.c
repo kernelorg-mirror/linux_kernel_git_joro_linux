@@ -351,6 +351,28 @@ void __init idt_setup_early_handler(void)
 	load_idt(&idt_descr);
 }
 
+#ifdef CONFIG_X86_64
+/*
+ * This function does the same as idt_setup_early_handler(), but is
+ * called directly from head_64.S before the kernel switches to virtual
+ * addresses.  PV-ops don't work at that point, so set_intr_gate() can't
+ * be used here.
+ */
+void __init setup_early_handlers(gate_desc *idt)
+{
+	int i;
+
+	for (i = 0; i < NUM_EXCEPTION_VECTORS; i++) {
+		struct idt_data data;
+		gate_desc desc;
+
+		init_idt_data(&data, i, early_idt_handler_array[i]);
+		idt_init_desc(&desc, &data);
+		native_write_idt_entry(idt, i, &desc);
+	}
+}
+#endif
+
 /**
  * idt_invalidate - Invalidate interrupt descriptor table
  * @addr:	The virtual address of the 'invalid' IDT
