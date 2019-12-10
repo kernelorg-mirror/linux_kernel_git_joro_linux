@@ -286,6 +286,9 @@ unsigned long __head __startup_64(unsigned long physaddr,
 		}
 	}
 
+	/* Setup IDT with early handlers */
+	early_idt_setup_early_handler(physaddr);
+
 	/*
 	 * Return the SME encryption mask (if SME is active) to be used as a
 	 * modifier for the initial pgdir entry programmed into CR3.

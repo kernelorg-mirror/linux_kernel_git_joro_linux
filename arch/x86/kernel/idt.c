@@ -10,6 +10,7 @@
 #include <asm/proto.h>
 #include <asm/desc.h>
 #include <asm/hw_irq.h>
+#include <asm/setup.h>
 
 struct idt_data {
 	unsigned int	vector;
@@ -384,4 +385,26 @@ void __init alloc_intr_gate(unsigned int n, const void *addr)
 
 	if (!WARN_ON(test_and_set_bit(n, system_vectors)))
 		set_intr_gate(n, addr);
+}
+
+void __init early_idt_setup_early_handler(unsigned long physaddr)
+{
+	gate_desc *idt;
+	int i;
+
+	idt = fixup_pointer(idt_table, physaddr);
+
+	for (i = 0; i < NUM_EXCEPTION_VECTORS; i++) {
+		struct idt_data data;
+		gate_desc desc;
+
+		init_idt_data(&data, i, early_idt_handler_array[i]);
+		idt_init_desc(&desc, &data);
+		native_write_idt_entry(idt, i, &desc);
+	}
+}
+
+void early_load_idt(void)
+{
+	load_idt(&idt_descr);
 }
