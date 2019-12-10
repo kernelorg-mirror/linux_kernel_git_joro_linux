@@ -440,6 +440,7 @@ extern void idt_setup_apic_and_irq_gates(void);
 extern void idt_setup_early_pf(void);
 extern void idt_setup_ist_traps(void);
 extern void idt_setup_debugidt_traps(void);
+extern void setup_early_handlers(gate_desc *idt);
 #else
 static inline void idt_setup_early_pf(void) { }
 static inline void idt_setup_ist_traps(void) { }
