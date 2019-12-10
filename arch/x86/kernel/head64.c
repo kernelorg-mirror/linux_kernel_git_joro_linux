@@ -36,6 +36,8 @@
 #include <asm/microcode.h>
 #include <asm/kasan.h>
 #include <asm/fixmap.h>
+#include <asm/extable.h>
+#include <asm/trap_defs.h>
 
 /*
  * Manage page tables very early on.
@@ -375,6 +377,24 @@ int __init early_make_pgtable(unsigned long address)
 	pmd = (physaddr & PMD_MASK) + early_pmd_flags;
 
 	return __early_make_pgtable(address, pmd);
+}
+
+void __init early_exception(struct pt_regs *regs, int trapnr)
+{
+	unsigned long cr2;
+	int r;
+
+	switch (trapnr) {
+	case X86_TRAP_PF:
+		cr2 = native_read_cr2();
+		r = early_make_pgtable(cr2);
+		break;
+	default:
+		r = 1;
+	}
+
+	if (r)
+		early_fixup_exception(regs, trapnr);
 }
 
 /* Don't add a printk in there. printk relies on the PDA which is not initialized 
