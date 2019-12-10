@@ -390,6 +390,11 @@ void __init early_exception(struct pt_regs *regs, int trapnr)
 		cr2 = native_read_cr2();
 		r = early_make_pgtable(cr2);
 		break;
+#ifdef CONFIG_AMD_MEM_ENCRYPT
+	case X86_TRAP_VC:
+		r = boot_vc_exception(regs);
+		break;
+#endif
 	default:
 		r = 1;
 	}
