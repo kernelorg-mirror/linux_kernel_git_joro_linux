@@ -5,6 +5,7 @@
 #include <xen/xen.h>
 
 #include <asm/fpu/internal.h>
+#include <asm/encrypted-state.h>
 #include <asm/traps.h>
 #include <asm/kdebug.h>
 

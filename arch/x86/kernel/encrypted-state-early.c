@@ -19,7 +19,7 @@ static void __maybe_unused terminate(unsigned reason)
 		asm volatile("hlt\n");
 }
 
-static bool __maybe_unused sev_es_negotiate_protocol(void)
+static bool sev_es_negotiate_protocol(void)
 {
 	u64 val;
 
