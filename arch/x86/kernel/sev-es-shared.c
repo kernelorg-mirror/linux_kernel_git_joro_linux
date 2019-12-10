@@ -9,7 +9,7 @@
  * and is included directly into both code-bases.
  */
 
-static void __maybe_unused terminate(unsigned int reason)
+static void terminate(unsigned int reason)
 {
 	/* Request Guest Termination from Hypvervisor */
 	write_ghcb_msr(GHCB_SEV_TERMINATE);
@@ -19,7 +19,7 @@ static void __maybe_unused terminate(unsigned int reason)
 		asm volatile("hlt\n" : : : "memory");
 }
 
-static bool __maybe_unused sev_es_negotiate_protocol(void)
+static bool sev_es_negotiate_protocol(void)
 {
 	u64 val;
 
@@ -38,7 +38,7 @@ static bool __maybe_unused sev_es_negotiate_protocol(void)
 	return true;
 }
 
-static void __maybe_unused ghcb_invalidate(struct ghcb *ghcb)
+static void ghcb_invalidate(struct ghcb *ghcb)
 {
 	memset(ghcb->save.valid_bitmap, 0, sizeof(ghcb->save.valid_bitmap));
 }
@@ -81,10 +81,9 @@ static bool decoding_needed(unsigned long exit_code)
 		 exit_code <= SVM_EXIT_LAST_EXCP);
 }
 
-static enum es_result __maybe_unused
-init_em_ctxt(struct es_em_ctxt *ctxt,
-	     struct pt_regs *regs,
-	     unsigned long exit_code)
+static enum es_result init_em_ctxt(struct es_em_ctxt *ctxt,
+				   struct pt_regs *regs,
+				   unsigned long exit_code)
 {
 	enum es_result ret = ES_OK;
 
@@ -97,7 +96,7 @@ init_em_ctxt(struct es_em_ctxt *ctxt,
 	return ret;
 }
 
-static void __maybe_unused finish_insn(struct es_em_ctxt *ctxt)
+static void finish_insn(struct es_em_ctxt *ctxt)
 {
 	ctxt->regs->ip += ctxt->insn.length;
 }

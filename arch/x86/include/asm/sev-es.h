@@ -76,5 +76,6 @@ static inline u64 copy_lower_bits(u64 out, u64 in, unsigned int bits)
 }
 
 extern void early_vc_handler(void);
+extern bool boot_vc_exception(struct pt_regs *regs);
 
 #endif
