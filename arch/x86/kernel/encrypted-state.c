@@ -217,6 +217,25 @@ static enum es_result handle_vc_exception(struct es_em_ctxt *ctxt,
 	return result;
 }
 
+static enum es_result context_filter(struct pt_regs *regs, long exit_code)
+{
+	enum es_result r = ES_OK;
+
+	if (user_mode(regs)) {
+		switch (exit_code) {
+		/* List of #VC exit-codes we support in user-space */
+		case SVM_EXIT_CPUID:
+			r = ES_OK;
+			break;
+		default:
+			r = ES_UNSUPPORTED;
+			break;
+		}
+	}
+
+	return r;
+}
+
 static void forward_exception(struct es_em_ctxt *ctxt)
 {
 	long error_code = ctxt->fi.error_code;
@@ -252,6 +271,10 @@ dotraplinkage void do_vmm_communication(struct pt_regs *regs, long exit_code)
 
 	ghcb_invalidate(ghcb);
 	result = init_em_ctxt(&ctxt, regs);
+
+	/* Check if the exception is supported in the context we came from. */
+	if (result == ES_OK)
+		result = context_filter(regs, exit_code);
 
 	if (result == ES_OK)
 		result = handle_vc_exception(&ctxt, ghcb, exit_code);
