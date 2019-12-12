@@ -109,13 +109,29 @@ static enum es_result vc_fetch_insn_byte(struct es_em_ctxt *ctxt,
 					 unsigned int offset,
 					 char *buffer)
 {
-	char *rip = (char *)ctxt->regs->ip;
+	if (user_mode(ctxt->regs)) {
+		unsigned long addr = ctxt->regs->ip + offset;
+		char __user *rip = (char __user *)addr;
 
-	/* More checks are needed when we boot to user-space */
-	if (!vc_check_kernel(ctxt->regs))
-		return ES_UNSUPPORTED;
+		if (unlikely(addr >= TASK_SIZE_MAX))
+			return ES_UNSUPPORTED;
 
-	buffer[offset] = rip[offset];
+		if (copy_from_user(buffer + offset, rip, 1)) {
+			ctxt->fi.vector     = X86_TRAP_PF;
+			ctxt->fi.cr2        = addr;
+			ctxt->fi.error_code = X86_PF_INSTR | X86_PF_USER;
+			return ES_EXCEPTION;
+		}
+	} else {
+		char *rip = (char *)ctxt->regs->ip + offset;
+
+		if (probe_kernel_read(buffer + offset, rip, 1) != 0) {
+			ctxt->fi.vector     = X86_TRAP_PF;
+			ctxt->fi.cr2        = (unsigned long)rip;
+			ctxt->fi.error_code = X86_PF_INSTR;
+			return ES_EXCEPTION;
+		}
+	}
 
 	return ES_OK;
 }
