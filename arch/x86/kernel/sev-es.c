@@ -308,6 +308,11 @@ static enum es_result handle_rdpmc(struct ghcb *ghcb, struct es_em_ctxt *ctxt)
 	return ES_OK;
 }
 
+static enum es_result handle_invd(struct ghcb *ghcb, struct es_em_ctxt *ctxt)
+{
+	return ghcb_hv_call(ghcb, ctxt, SVM_EXIT_INVD, 0, 0);
+}
+
 static enum es_result handle_vc_exception(struct es_em_ctxt *ctxt,
 					  struct ghcb *ghcb,
 					  unsigned long exit_code,
@@ -327,6 +332,9 @@ static enum es_result handle_vc_exception(struct es_em_ctxt *ctxt,
 		break;
 	case SVM_EXIT_RDPMC:
 		result = handle_rdpmc(ghcb, ctxt);
+		break;
+	case SVM_EXIT_INVD:
+		result = handle_invd(ghcb, ctxt);
 		break;
 	case SVM_EXIT_CPUID:
 		result = handle_cpuid(ghcb, ctxt);
