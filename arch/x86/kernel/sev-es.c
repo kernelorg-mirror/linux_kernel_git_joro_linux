@@ -318,6 +318,21 @@ static enum es_result handle_invd(struct ghcb *ghcb, struct es_em_ctxt *ctxt)
 	return ghcb_hv_call(ghcb, ctxt, SVM_EXIT_INVD, 0, 0);
 }
 
+static enum es_result handle_monitor(struct ghcb *ghcb, struct es_em_ctxt *ctxt)
+{
+	phys_addr_t monitor_pa;
+	pgd_t *pgd;
+
+	pgd = __va(read_cr3_pa());
+	monitor_pa = es_slow_virt_to_phys(ghcb, ctxt->regs->ax);
+
+	ghcb_set_rax(ghcb, monitor_pa);
+	ghcb_set_rcx(ghcb, ctxt->regs->cx);
+	ghcb_set_rdx(ghcb, ctxt->regs->dx);
+
+	return ghcb_hv_call(ghcb, ctxt, SVM_EXIT_MONITOR, 0, 0);
+}
+
 static enum es_result handle_vc_exception(struct es_em_ctxt *ctxt,
 					  struct ghcb *ghcb,
 					  unsigned long exit_code,
@@ -353,6 +368,9 @@ static enum es_result handle_vc_exception(struct es_em_ctxt *ctxt,
 		break;
 	case SVM_EXIT_WBINVD:
 		result = handle_wbinvd(ghcb, ctxt);
+		break;
+	case SVM_EXIT_MONITOR:
+		result = handle_monitor(ghcb, ctxt);
 		break;
 	case SVM_EXIT_NPF:
 		result = handle_mmio(ghcb, ctxt);
