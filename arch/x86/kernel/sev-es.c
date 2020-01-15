@@ -341,6 +341,26 @@ static enum es_result handle_mwait(struct ghcb *ghcb, struct es_em_ctxt *ctxt)
 	return ghcb_hv_call(ghcb, ctxt, SVM_EXIT_MWAIT, 0, 0);
 }
 
+static enum es_result handle_vmmcall(struct ghcb *ghcb,
+				     struct es_em_ctxt *ctxt)
+{
+	enum es_result ret;
+
+	ghcb_set_rax(ghcb, ctxt->regs->ax);
+	ghcb_set_cpl(ghcb, user_mode(ctxt->regs) ? 3 : 0);
+
+	ret = ghcb_hv_call(ghcb, ctxt, SVM_EXIT_VMMCALL, 0, 0);
+	if (ret != ES_OK)
+		return ret;
+
+	if (!ghcb_is_valid_rax(ghcb))
+		return ES_VMM_ERROR;
+
+	ctxt->regs->ax = ghcb->save.rax;
+
+	return ES_OK;
+}
+
 static enum es_result handle_vc_exception(struct es_em_ctxt *ctxt,
 					  struct ghcb *ghcb,
 					  unsigned long exit_code,
@@ -373,6 +393,9 @@ static enum es_result handle_vc_exception(struct es_em_ctxt *ctxt,
 		break;
 	case SVM_EXIT_MSR:
 		result = handle_msr(ghcb, ctxt);
+		break;
+	case SVM_EXIT_VMMCALL:
+		result = handle_vmmcall(ghcb, ctxt);
 		break;
 	case SVM_EXIT_WBINVD:
 		result = handle_wbinvd(ghcb, ctxt);
