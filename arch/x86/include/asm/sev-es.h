@@ -78,4 +78,15 @@ static inline u64 copy_lower_bits(u64 out, u64 in, unsigned int bits)
 extern void early_vc_handler(void);
 extern bool boot_vc_exception(struct pt_regs *regs);
 
+struct real_mode_header;
+
+#ifdef CONFIG_AMD_MEM_ENCRYPT
+int sev_es_setup_ap_jump_table(struct real_mode_header *rmh);
+#else /* CONFIG_AMD_MEM_ENCRYPT */
+static inline int sev_es_setup_ap_jump_table(struct real_mode_header *rmh)
+{
+	return 0;
+}
+#endif /* CONFIG_AMD_MEM_ENCRYPT*/
+
 #endif
