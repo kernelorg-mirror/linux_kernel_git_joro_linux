@@ -22,6 +22,8 @@
 #include <asm/processor.h>
 #include <asm/traps.h>
 #include <asm/svm.h>
+#include <asm/smp.h>
+#include <asm/cpu.h>
 
 #define DR7_RESET_VALUE        0x400
 
@@ -252,6 +254,48 @@ static bool __init setup_ghcb(void)
 	return true;
 }
 
+#ifdef CONFIG_HOTPLUG_CPU
+static void sev_es_ap_hlt_loop(void)
+{
+	struct ghcb *ghcb;
+
+	ghcb = this_cpu_ptr(&ghcb_page);
+
+	while (true) {
+		ghcb_invalidate(ghcb);
+		ghcb_set_sw_exit_code(ghcb, SVM_VMGEXIT_AP_HLT_LOOP);
+		ghcb_set_sw_exit_info_1(ghcb, 0);
+		ghcb_set_sw_exit_info_2(ghcb, 0);
+
+		write_ghcb_msr(__pa(ghcb));
+		VMGEXIT();
+
+		/* Wakup Signal? */
+		if (ghcb_is_valid_sw_exit_info_2(ghcb) &&
+		    ghcb->save.sw_exit_info_2 != 0)
+			break;
+	}
+}
+
+void sev_es_play_dead(void)
+{
+	play_dead_common();
+
+	/* IRQs now disabled */
+
+	sev_es_ap_hlt_loop();
+
+	/*
+	 * If we get here, the VCPU was woken up again. Jump to CPU
+	 * startup code to get it back online.
+	 */
+
+	start_cpu();
+}
+#else  /* CONFIG_HOTPLUG_CPU */
+#define sev_es_play_dead	native_play_dead
+#endif /* CONFIG_HOTPLUG_CPU */
+
 void encrypted_state_init_ghcbs(void)
 {
 	int cpu;
@@ -267,6 +311,8 @@ void encrypted_state_init_ghcbs(void)
 				     sizeof(ghcb_page) >> PAGE_SHIFT);
 		memset(ghcb, 0, sizeof(*ghcb));
 	}
+
+	smp_ops.play_dead = sev_es_play_dead;
 }
 
 static void __init early_forward_exception(struct es_em_ctxt *ctxt)
