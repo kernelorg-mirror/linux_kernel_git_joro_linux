@@ -38,6 +38,7 @@
 #include <asm/export.h>
 #include <asm/frame.h>
 #include <asm/nospec-branch.h>
+#include <asm/sev-es.h>
 #include <linux/err.h>
 
 #include "calling.h"
@@ -629,6 +630,13 @@ SYM_INNER_LABEL(swapgs_restore_regs_and_return_to_usermode, SYM_L_GLOBAL)
 	ud2
 1:
 #endif
+
+	/*
+	 * This code path is used by the NMI handler, so check if NMIs
+	 * need to be re-enabled when running as an SEV-ES guest.
+	 */
+	SEV_ES_IRET_CHECK
+
 	POP_REGS pop_rdi=0
 
 	/*
@@ -1474,6 +1482,8 @@ SYM_CODE_START(nmi)
 	movq	$-1, %rsi
 	call	do_nmi
 
+	SEV_ES_NMI_COMPLETE
+
 	/*
 	 * Return back to user mode.  We must *not* do the normal exit
 	 * work, because we don't want to enable interrupts.
@@ -1599,6 +1609,7 @@ nested_nmi_out:
 	popq	%rdx
 
 	/* We are returning to kernel mode, so this cannot result in a fault. */
+	SEV_ES_NMI_COMPLETE
 	iretq
 
 first_nmi:
@@ -1687,6 +1698,12 @@ end_repeat_nmi:
 	movq	$-1, %rsi
 	call	do_nmi
 
+	/*
+	 * When running as an SEV-ES guest, jump to the SEV-ES NMI IRET
+	 * path.
+	 */
+	SEV_ES_NMI_COMPLETE
+
 	/* Always restore stashed CR3 value (see paranoid_entry) */
 	RESTORE_CR3 scratch_reg=%r15 save_reg=%r14
 
@@ -1715,6 +1732,9 @@ nmi_restore:
 	std
 	movq	$0, 5*8(%rsp)		/* clear "NMI executing" */
 
+nmi_return:
+	UNWIND_HINT_IRET_REGS
+
 	/*
 	 * iretq reads the "iret" frame and exits the NMI stack in a
 	 * single instruction.  We are returning to kernel mode, so this
@@ -1723,6 +1743,34 @@ nmi_restore:
 	 */
 	iretq
 SYM_CODE_END(nmi)
+
+#ifdef CONFIG_AMD_MEM_ENCRYPT
+SYM_CODE_START(sev_es_iret_user)
+	UNWIND_HINT_IRET_REGS offset=8
+	/*
+	 * The kernel jumps here directly from
+	 * swapgs_restore_regs_and_return_to_usermode. %rsp points already to
+	 * trampoline stack, but %cr3 is still from kernel. User-regs are live
+	 * except %rdi. Switch to user CR3, restore user %rdi and user gs_base
+	 * and single-step over IRET
+	 */
+	SWITCH_TO_USER_CR3_STACK scratch_reg=%rdi
+	popq	%rdi
+	SWAPGS
+	/*
+	 * Enable single-stepping and execute IRET. When IRET is
+	 * finished the resulting #DB exception will cause a #VC
+	 * exception to be raised. The #VC exception handler will send a
+	 * NMI-complete message to the hypervisor to re-open the NMI
+	 * window.
+	 */
+sev_es_iret_kernel:
+	pushf
+	btsq $X86_EFLAGS_TF_BIT, (%rsp)
+	popf
+	iretq
+SYM_CODE_END(sev_es_iret_user)
+#endif
 
 #ifndef CONFIG_IA32_EMULATION
 /*
