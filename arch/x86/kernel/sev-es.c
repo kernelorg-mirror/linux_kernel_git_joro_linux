@@ -36,6 +36,7 @@ struct ghcb boot_ghcb_page __bss_decrypted __aligned(PAGE_SIZE);
  */
 struct ghcb __initdata *boot_ghcb;
 static DEFINE_PER_CPU(unsigned long, cached_dr7) = DR7_RESET_VALUE;
+static DEFINE_PER_CPU(bool, sev_es_in_nmi) = false;
 /* Needed before per-cpu access is set up */
 static unsigned long early_dr7 = DR7_RESET_VALUE;
 
@@ -143,6 +144,28 @@ static phys_addr_t es_slow_virt_to_phys(struct ghcb *ghcb, long vaddr)
 
 /* Include code shared with pre-decompression boot stage */
 #include "sev-es-shared.c"
+
+void sev_es_nmi_enter(void)
+{
+	this_cpu_write(sev_es_in_nmi, true);
+}
+
+void sev_es_nmi_complete(void)
+{
+	struct ghcb *ghcb;
+
+	ghcb = this_cpu_ptr(&ghcb_page);
+
+	ghcb_invalidate(ghcb);
+	ghcb_set_sw_exit_code(ghcb, SVM_VMGEXIT_NMI_COMPLETE);
+	ghcb_set_sw_exit_info_1(ghcb, 0);
+	ghcb_set_sw_exit_info_2(ghcb, 0);
+
+	write_ghcb_msr(__pa(ghcb));
+	VMGEXIT();
+
+	this_cpu_write(sev_es_in_nmi, false);
+}
 
 static u64 sev_es_get_jump_table_addr(void)
 {
@@ -485,7 +508,10 @@ static enum es_result handle_vmmcall(struct ghcb *ghcb,
 static enum es_result handle_db_exception(struct ghcb *ghcb,
 					  struct es_em_ctxt *ctxt)
 {
-	do_debug(ctxt->regs, 0);
+	if (this_cpu_read(sev_es_in_nmi))
+		sev_es_nmi_complete();
+	else
+		do_debug(ctxt->regs, 0);
 
 	/* Exception event, do not advance RIP */
 	return ES_RETRY;
