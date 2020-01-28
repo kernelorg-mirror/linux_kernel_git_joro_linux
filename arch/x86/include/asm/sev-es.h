@@ -8,6 +8,8 @@
 #ifndef __ASM_ENCRYPTED_STATE_H
 #define __ASM_ENCRYPTED_STATE_H
 
+#ifndef __ASSEMBLY__
+
 #include <linux/types.h>
 #include <asm/insn.h>
 
@@ -82,11 +84,36 @@ struct real_mode_header;
 
 #ifdef CONFIG_AMD_MEM_ENCRYPT
 int sev_es_setup_ap_jump_table(struct real_mode_header *rmh);
+void sev_es_nmi_enter(void);
 #else /* CONFIG_AMD_MEM_ENCRYPT */
 static inline int sev_es_setup_ap_jump_table(struct real_mode_header *rmh)
 {
 	return 0;
 }
+static inline void sev_es_nmi_enter(void) { }
 #endif /* CONFIG_AMD_MEM_ENCRYPT*/
+
+#else /* !__ASSEMBLY__ */
+
+#ifdef CONFIG_AMD_MEM_ENCRYPT
+#define SEV_ES_NMI_COMPLETE		\
+	ALTERNATIVE	"", "callq sev_es_nmi_complete", X86_FEATURE_SEV_ES_GUEST
+
+.macro	SEV_ES_IRET_CHECK
+	ALTERNATIVE	"jmp	.Lend_\@", "", X86_FEATURE_SEV_ES_GUEST
+	movq	PER_CPU_VAR(sev_es_in_nmi), %rdi
+	testq	%rdi, %rdi
+	jz	.Lend_\@
+	callq	sev_es_nmi_complete
+.Lend_\@:
+.endm
+
+#else  /* CONFIG_AMD_MEM_ENCRYPT */
+#define	SEV_ES_NMI_COMPLETE
+.macro	SEV_ES_IRET_CHECK
+.endm
+#endif /* CONFIG_AMD_MEM_ENCRYPT*/
+
+#endif /* __ASSEMBLY__ */
 
 #endif
