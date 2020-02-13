@@ -31,8 +31,56 @@ struct ghcb boot_ghcb_page __bss_decrypted __aligned(PAGE_SIZE);
  */
 struct ghcb __initdata *boot_ghcb;
 
+struct ghcb_state {
+	struct ghcb *ghcb;
+};
+
 /* Runtime GHCB pointers */
 static struct ghcb __percpu *ghcb_page;
+
+/*
+ * Mark the per-cpu GHCB as in-use to detect nested #VC exceptions.
+ * There is no need for it to be atomic, because nothing is written to the GHCB
+ * between the read and the write of ghcb_active. So it is safe to use it when a
+ * nested #VC exception happens before the write.
+ */
+static DEFINE_PER_CPU(bool, ghcb_active);
+
+static struct ghcb* sev_es_get_ghcb(struct ghcb_state *state)
+{
+	struct ghcb *ghcb = (struct ghcb *)this_cpu_ptr(ghcb_page);
+	bool *active = this_cpu_ptr(&ghcb_active);
+
+	if (unlikely(*active)) {
+		/* GHCB is already in use - save its contents */
+
+		state->ghcb = kzalloc(sizeof(struct ghcb), GFP_ATOMIC);
+		if (!state->ghcb)
+			return NULL;
+
+		*state->ghcb = *ghcb;
+	} else {
+		state->ghcb = NULL;
+		*active = true;
+	}
+
+	return ghcb;
+}
+
+static void sev_es_put_ghcb(struct ghcb_state *state)
+{
+	bool *active = this_cpu_ptr(&ghcb_active);
+	struct ghcb *ghcb = (struct ghcb *)this_cpu_ptr(ghcb_page);
+
+	if (state->ghcb) {
+		/* Restore saved state and free backup memory */
+		*ghcb = *state->ghcb;
+		kfree(state->ghcb);
+		state->ghcb = NULL;
+	} else {
+		*active = false;
+	}
+}
 
 /* Needed in vc_early_vc_forward_exception */
 extern void early_exception(struct pt_regs *regs, int trapnr);
@@ -208,6 +256,7 @@ static void vc_forward_exception(struct es_em_ctxt *ctxt)
 
 dotraplinkage void do_vmm_communication(struct pt_regs *regs, unsigned long exit_code)
 {
+	struct ghcb_state state;
 	struct es_em_ctxt ctxt;
 	enum es_result result;
 	struct ghcb *ghcb;
@@ -218,13 +267,19 @@ dotraplinkage void do_vmm_communication(struct pt_regs *regs, unsigned long exit
 	 * keep the IRQs disabled to protect us against concurrent TLB flushes.
 	 */
 
-	ghcb = (struct ghcb *)this_cpu_ptr(ghcb_page);
-
-	vc_ghcb_invalidate(ghcb);
-	result = vc_init_em_ctxt(&ctxt, regs, exit_code);
+	ghcb = sev_es_get_ghcb(&state);
+	if (!ghcb) {
+		/* This can only fail on an allocation error, so just retry */
+		result = ES_RETRY;
+	} else {
+		vc_ghcb_invalidate(ghcb);
+		result = vc_init_em_ctxt(&ctxt, regs, exit_code);
+	}
 
 	if (result == ES_OK)
 		result = vc_handle_exitcode(&ctxt, ghcb, exit_code);
+
+	sev_es_put_ghcb(&state);
 
 	/* Done - now check the result */
 	switch (result) {
