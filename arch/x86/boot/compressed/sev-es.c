@@ -7,6 +7,7 @@
 
 #include <linux/kernel.h>
 
+#include <asm/pgtable_types.h>
 #include <asm/sev-es.h>
 #include <asm/trap_defs.h>
 #include <asm/msr-index.h>
