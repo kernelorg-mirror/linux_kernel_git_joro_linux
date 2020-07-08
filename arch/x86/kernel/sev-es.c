@@ -667,6 +667,16 @@ static void __init sev_es_init_ghcb(int cpu)
 	data->backup_ghcb_active = false;
 }
 
+static bool __init sev_es_check_cpu_features(void)
+{
+	if (!boot_cpu_has(X86_FEATURE_RDRAND)) {
+		pr_err("RDRAND instruction not supported - no trusted source of randomness available\n");
+		return false;
+	}
+
+	return true;
+}
+
 void __init sev_es_init_vc_handling(void)
 {
 	int cpu;
@@ -675,6 +685,9 @@ void __init sev_es_init_vc_handling(void)
 
 	if (!sev_es_active())
 		return;
+
+	if (!sev_es_check_cpu_features())
+		panic("SEV-ES CPU Features missing");
 
 	/* Initialize per-cpu GHCB pages */
 	for_each_possible_cpu(cpu) {
