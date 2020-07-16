@@ -78,6 +78,14 @@ SYM_CODE_START_NOALIGN(startup_64)
 	call	startup_64_setup_env
 	popq	%rsi
 
+	/*
+	 * Setup %gs here already to make stack-protector work - it needs to be
+	 * setup again after the switch to kernel addresses. The address read
+	 * from initial_gs is a kernel address, so it needs to be adjusted first
+	 * for the identity mapping.
+	 */
+	movl	$MSR_GS_BASE,%ecx
+
 	/* Now switch to __KERNEL_CS so IRET works reliably */
 	pushq	$__KERNEL_CS
 	leaq	.Lon_kernel_cs(%rip), %rax

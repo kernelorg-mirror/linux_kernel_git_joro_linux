@@ -36,6 +36,7 @@
 #include <asm/microcode.h>
 #include <asm/kasan.h>
 #include <asm/fixmap.h>
+#include <asm/realmode.h>
 
 /*
  * Manage page tables very early on.
@@ -513,6 +514,8 @@ void __init x86_64_start_reservations(char *real_mode_data)
  */
 void __head startup_64_setup_env(unsigned long physbase)
 {
+	unsigned long gsbase;
+
 	/* Load GDT */
 	startup_gdt_descr.address = (unsigned long)fixup_pointer(startup_gdt, physbase);
 	native_load_gdt(&startup_gdt_descr);
@@ -521,4 +524,8 @@ void __head startup_64_setup_env(unsigned long physbase)
 	asm volatile("movl %%eax, %%ds\n"
 		     "movl %%eax, %%ss\n"
 		     "movl %%eax, %%es\n" : : "a"(__KERNEL_DS) : "memory");
+
+	/* Setup GS_BASE - needed for stack protector */
+	gsbase = (unsigned long)fixup_pointer((void *)initial_gs, physbase);
+	__wrmsr(MSR_GS_BASE, (u32)gsbase, (u32)(gsbase >> 32));
 }
