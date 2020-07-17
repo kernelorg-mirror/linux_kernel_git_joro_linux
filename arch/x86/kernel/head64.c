@@ -545,3 +545,14 @@ void __head startup_64_setup_env(unsigned long physbase)
 	gsbase = (unsigned long)fixup_pointer((void *)initial_gs, physbase);
 	__wrmsr(MSR_GS_BASE, (u32)gsbase, (u32)(gsbase >> 32));
 }
+
+void __head early_load_tss(void)
+{
+	struct desc_struct *gdt = (struct desc_struct *)early_gdt_descr.address;
+	tss_desc tss;
+
+	/* Load TSS only if entry in GDT is marked present */
+	memcpy(&tss, &gdt[GDT_ENTRY_TSS], sizeof(tss_desc));
+	if (tss.p)
+		asm volatile("ltr %w0"::"q" (GDT_ENTRY_TSS*8));
+}

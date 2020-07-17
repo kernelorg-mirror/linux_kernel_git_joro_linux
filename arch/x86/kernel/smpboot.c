@@ -1040,6 +1040,12 @@ static int do_boot_cpu(int apicid, int cpu, struct task_struct *idle,
 	/* Enable the espfix hack for this CPU */
 	init_espfix_ap(cpu);
 
+	/* Set up GDT_ENTRY_CPUNODE for early exception handling */
+	setup_getcpu(cpu);
+
+	/* Setup TSS so that AP can use IST early */
+	tss_setup(cpu);
+
 	/* So we see what's up */
 	announce_cpu(cpu, apicid);
 

@@ -1794,7 +1794,7 @@ static void wait_for_master_cpu(int cpu)
 }
 
 #ifdef CONFIG_X86_64
-static inline void setup_getcpu(int cpu)
+void setup_getcpu(int cpu)
 {
 	unsigned long cpudata = vdso_encode_cpunode(cpu, early_cpu_to_node(cpu));
 	struct desc_struct d = { };
@@ -1821,27 +1821,26 @@ static inline void ucode_cpu_init(int cpu)
 		load_ucode_ap();
 }
 
-static inline void tss_setup_ist(struct tss_struct *tss)
+static inline void tss_setup_ist(struct tss_struct *tss,
+				 struct cpu_entry_area *cea)
 {
 	/* Set up the per-CPU TSS IST stacks */
-	tss->x86_tss.ist[IST_INDEX_DF] = __this_cpu_ist_top_va(DF);
-	tss->x86_tss.ist[IST_INDEX_NMI] = __this_cpu_ist_top_va(NMI);
-	tss->x86_tss.ist[IST_INDEX_DB] = __this_cpu_ist_top_va(DB);
-	tss->x86_tss.ist[IST_INDEX_MCE] = __this_cpu_ist_top_va(MCE);
+	tss->x86_tss.ist[IST_INDEX_DF]  = CEA_ESTACK_TOP(&cea->estacks, DF);
+	tss->x86_tss.ist[IST_INDEX_NMI] = CEA_ESTACK_TOP(&cea->estacks, NMI);
+	tss->x86_tss.ist[IST_INDEX_DB]  = CEA_ESTACK_TOP(&cea->estacks, DB);
+	tss->x86_tss.ist[IST_INDEX_MCE] = CEA_ESTACK_TOP(&cea->estacks, MCE);
 	/* Only mapped when SEV-ES is active */
-	tss->x86_tss.ist[IST_INDEX_VC] = __this_cpu_ist_top_va(VC);
+	tss->x86_tss.ist[IST_INDEX_VC]	= CEA_ESTACK_TOP(&cea->estacks, VC);
 }
 
 #else /* CONFIG_X86_64 */
-
-static inline void setup_getcpu(int cpu) { }
 
 static inline void ucode_cpu_init(int cpu)
 {
 	show_ucode_info_early();
 }
 
-static inline void tss_setup_ist(struct tss_struct *tss) { }
+static inline void tss_setup_ist(struct tss_struct *tss, struct cpu_entry_area *cea) { }
 
 #endif /* !CONFIG_X86_64 */
 
@@ -1861,6 +1860,17 @@ static inline void tss_setup_io_bitmap(struct tss_struct *tss)
 #endif
 }
 
+void tss_setup(int cpu)
+{
+	struct tss_struct *tss = per_cpu_ptr(&cpu_tss_rw, cpu);
+	struct cpu_entry_area *cea = get_cpu_entry_area(cpu);
+
+	/* Initialize the TSS for cpu. */
+	tss_setup_ist(tss, cea);
+	tss_setup_io_bitmap(tss);
+	set_tss_desc(cpu, &cea->tss.x86_tss);
+}
+
 /*
  * cpu_init() initializes state that is per-CPU. Some data is already
  * initialized (naturally) in the bootstrap process, such as the GDT
@@ -1869,7 +1879,6 @@ static inline void tss_setup_io_bitmap(struct tss_struct *tss)
  */
 void cpu_init(void)
 {
-	struct tss_struct *tss = this_cpu_ptr(&cpu_tss_rw);
 	struct task_struct *cur = current;
 	int cpu = raw_smp_processor_id();
 
@@ -1915,10 +1924,8 @@ void cpu_init(void)
 	initialize_tlbstate_and_flush();
 	enter_lazy_tlb(&init_mm, cur);
 
-	/* Initialize the TSS. */
-	tss_setup_ist(tss);
-	tss_setup_io_bitmap(tss);
-	set_tss_desc(cpu, &get_cpu_entry_area(cpu)->tss.x86_tss);
+	/* Initialize the TSS - Only needed on the boot-CPU */
+	tss_setup(cpu);
 
 	load_TR_desc();
 	/*

@@ -761,6 +761,13 @@ extern void load_fixmap_gdt(int);
 extern void load_percpu_segment(int);
 extern void cpu_init(void);
 extern void cr4_init(void);
+extern void tss_setup(int cpu);
+
+#ifdef CONFIG_X86_64
+extern void setup_getcpu(int cpu);
+#else
+static inline void setup_getcpu(int cpu) { }
+#endif
 
 static inline unsigned long get_debugctlmsr(void)
 {
