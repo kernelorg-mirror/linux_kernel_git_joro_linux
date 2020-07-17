@@ -153,6 +153,13 @@ SYM_CODE_START(secondary_startup_64)
 	orl	$X86_CR4_LA57, %ecx
 1:
 #endif
+
+	ALTERNATIVE "jmp .Lstartup_write_cr4", "", X86_FEATURE_FSGSBASE
+
+	/* Early exception handling uses FSGSBASE on APs */
+	orl	$X86_CR4_FSGSBASE, %ecx
+
+.Lstartup_write_cr4:
 	movq	%rcx, %cr4
 
 	/* Setup early boot stage 4-/5-level pagetables. */
