@@ -406,6 +406,12 @@ void __init do_early_exception(struct pt_regs *regs, int trapnr)
 	    early_make_pgtable(native_read_cr2()))
 		return;
 
+#ifdef CONFIG_AMD_MEM_ENCRYPT
+	if (trapnr == X86_TRAP_VC &&
+	    handle_vc_boot_ghcb(regs))
+		return;
+#endif
+
 	early_fixup_exception(regs, trapnr);
 }
 
@@ -572,6 +578,11 @@ static void startup_64_load_idt(unsigned long physbase)
 /* This is used when running on kernel addresses */
 void early_setup_idt(void)
 {
+#ifdef CONFIG_AMD_MEM_ENCRYPT
+	/* VMM Communication Exception */
+	set_bringup_idt_handler(X86_TRAP_VC, vc_boot_ghcb);
+#endif
+
 	bringup_idt_descr.address = (unsigned long)bringup_idt_table;
 	native_load_idt(&bringup_idt_descr);
 }
