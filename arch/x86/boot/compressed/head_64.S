@@ -92,6 +92,11 @@ SYM_FUNC_START(startup_32)
 	lretl
 1:
 
+#ifdef CONFIG_AMD_MEM_ENCRYPT
+	/* Setup Exception handling for SEV-ES */
+	call	startup32_load_idt
+#endif
+
 	/* Make sure cpu supports long mode. */
 	call	verify_cpu
 	testl	%eax, %eax
@@ -538,7 +543,6 @@ SYM_FUNC_END_ALIAS(efi_stub_entry)
 
 	.text
 SYM_FUNC_START_LOCAL_NOALIGN(.Lrelocated)
-
 /*
  * Clear BSS (stack is currently empty)
  */
