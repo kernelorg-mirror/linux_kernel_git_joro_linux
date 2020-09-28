@@ -67,10 +67,85 @@ SYM_FUNC_START(get_sev_encryption_bit)
 	ret
 SYM_FUNC_END(get_sev_encryption_bit)
 
+/*
+ * Emit code to request an CPUID register from the Hypervisor using
+ * the MSR-based protocol.
+ *
+ * fn: The register containing the CPUID function
+ * reg: Register requested
+ *	1 = EAX
+ *	2 = EBX
+ *	3 = ECX
+ *	4 = EDX
+ *
+ * Result is in EDX. Jumps to .Lfail on error
+ */
+.macro	SEV_ES_REQ_CPUID fn:req reg:req
+	/* Request CPUID[%ebx].EAX */
+	movl	$\reg, %eax
+	shll	$30, %eax
+	orl	$0x00000004, %eax
+	movl	\fn, %edx
+	movl	$MSR_AMD64_SEV_ES_GHCB, %ecx
+	wrmsr
+	rep; vmmcall
+	rdmsr
+	/* Check response code */
+	andl	$0xfff, %eax
+	cmpl	$5, %eax
+	jne	.Lfail
+	/* All good */
+.endm
+
+SYM_CODE_START(startup32_vc_handler)
+	pushl	%eax
+	pushl	%ebx
+	pushl	%ecx
+	pushl	%edx
+
+	/* Keep CPUID function in %ebx */
+	movl	%eax, %ebx
+
+	/* Check if error-code == SVM_EXIT_CPUID */
+	cmpl	$0x72, 16(%esp)
+	jne	.Lfail
+
+	/* Request CPUID[%ebx].EAX */
+	SEV_ES_REQ_CPUID fn=%ebx reg=0
+	movl	%edx, 12(%esp)
+
+	/* Request CPUID[%ebx].EBX */
+	SEV_ES_REQ_CPUID fn=%ebx reg=1
+	movl	%edx, 8(%esp)
+
+	/* Request CPUID[%ebx].ECX */
+	SEV_ES_REQ_CPUID fn=%ebx reg=2
+	movl	%edx, 4(%esp)
+
+	/* Request CPUID[%ebx].EDX */
+	SEV_ES_REQ_CPUID fn=%ebx reg=3
+	movl	%edx, (%esp)
+
+	popl	%edx
+	popl	%ecx
+	popl	%ebx
+	popl	%eax
+
+	/* Remove error code */
+	addl	$4, %esp
+
+	/* Jump over CPUID instruction */
+	addl	$2, (%esp)
+
+	iret
+.Lfail:
+	hlt
+	jmp .Lfail
+SYM_CODE_END(startup32_vc_handler)
+
 	.code64
 
 #include "../../kernel/sev_verify_cbit.S"
-
 SYM_FUNC_START(set_sev_encryption_mask)
 #ifdef CONFIG_AMD_MEM_ENCRYPT
 	push	%rbp
