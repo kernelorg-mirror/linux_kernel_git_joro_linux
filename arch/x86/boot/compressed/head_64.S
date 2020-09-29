@@ -160,11 +160,18 @@ SYM_FUNC_START(startup_32)
 	 */
 	call	get_sev_encryption_bit
 	xorl	%edx, %edx
+#ifdef	CONFIG_AMD_MEM_ENCRYPT
 	testl	%eax, %eax
 	jz	1f
 	subl	$32, %eax	/* Encryption bit is always above bit 31 */
 	bts	%eax, %edx	/* Set encryption mask for page tables */
+	/*
+	 * Store the sme_me_mask as an indicator that SEV is active. It will be
+	 * set again in startup_64().
+	 */
+	movl	%edx, sme_me_mask+4(%ebp)
 1:
+#endif
 
 	/* Initialize Page tables to 0 */
 	leal	pgtable(%ebx), %edi
@@ -249,6 +256,9 @@ SYM_FUNC_START(startup_32)
 	movl	%esi, %edx
 1:
 #endif
+	/* Check if the C-bit position is correct when SEV is active */
+	call	sev_startup32_cbit_check
+
 	pushl	$__KERNEL_CS
 	pushl	%eax
 
