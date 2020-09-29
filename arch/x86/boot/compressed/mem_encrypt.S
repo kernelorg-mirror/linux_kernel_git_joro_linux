@@ -7,6 +7,7 @@
  * Author: Tom Lendacky <thomas.lendacky@amd.com>
  */
 
+#define rva(X) ((X) - startup_32)
 #include <linux/linkage.h>
 
 #include <asm/processor-flags.h>
