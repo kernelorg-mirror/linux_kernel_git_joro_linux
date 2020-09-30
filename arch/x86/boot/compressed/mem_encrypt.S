@@ -207,6 +207,8 @@ SYM_FUNC_END(startup32_load_idt)
 SYM_FUNC_START(set_sev_encryption_mask)
 #ifdef CONFIG_AMD_MEM_ENCRYPT
 	push	%rbp
+	push	%rax
+	push	%rcx
 	push	%rdx
 
 	movq	%rsp, %rbp		/* Save current stack pointer */
@@ -217,10 +219,19 @@ SYM_FUNC_START(set_sev_encryption_mask)
 
 	bts	%rax, sme_me_mask(%rip)	/* Create the encryption mask */
 
+	/* Read sev_status */
+	movl	$MSR_AMD64_SEV, %ecx
+	rdmsr
+	shlq	$32, %rdx
+	orq	%rdx, %rax
+	movq	%rax, sev_status(%rip)
+
 .Lno_sev_mask:
 	movq	%rbp, %rsp		/* Restore original stack pointer */
 
 	pop	%rdx
+	pop	%rcx
+	pop	%rax
 	pop	%rbp
 #endif
 
@@ -228,11 +239,14 @@ SYM_FUNC_START(set_sev_encryption_mask)
 	ret
 SYM_FUNC_END(set_sev_encryption_mask)
 
+#include "../../kernel/sev_verify_cbit.S"
+
 	.data
 
 #ifdef CONFIG_AMD_MEM_ENCRYPT
 	.balign	8
-SYM_DATA(sme_me_mask, .quad 0)
+SYM_DATA(sme_me_mask,		.quad 0)
+SYM_DATA(sev_status,		.quad 0)
 
 SYM_DATA_START(boot32_idt_desc)
 	.word   boot32_idt_end - boot32_idt - 1
