@@ -153,6 +153,7 @@ void initialize_identity_maps(void)
 	 * into cr3.
 	 */
 	add_identity_map((unsigned long)_head, (unsigned long)_end);
+	sev_verify_cbit(top_level_pgt);
 	write_cr3(top_level_pgt);
 }
 

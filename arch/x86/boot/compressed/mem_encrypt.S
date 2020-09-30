@@ -346,6 +346,8 @@ SYM_FUNC_START(set_sev_encryption_mask)
 	ret
 SYM_FUNC_END(set_sev_encryption_mask)
 
+#include "../../kernel/sev_verify_cbit.S"
+
 	.data
 
 #ifdef CONFIG_AMD_MEM_ENCRYPT
