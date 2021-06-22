@@ -119,15 +119,21 @@ static enum es_result vc_read_mem(struct es_em_ctxt *ctxt,
 /* Include code for early handlers */
 #include "../../kernel/sev-shared.c"
 
+static unsigned int ghcb_protocol;
+
 static u64 sev_get_ghcb_proto_ver(void)
 {
-	return GHCB_PROTOCOL_MAX;
+	return ghcb_protocol;
 }
 
 static bool early_setup_sev_es(void)
 {
-	if (!sev_es_negotiate_protocol(NULL))
+	struct sev_ghcb_protocol_info info;
+
+	if (!sev_es_negotiate_protocol(&info))
 		sev_es_terminate(GHCB_SEV_ES_REASON_PROTOCOL_UNSUPPORTED);
+
+	ghcb_protocol = info.vm_proto;
 
 	if (set_page_decrypted((unsigned long)&boot_ghcb_page))
 		return false;

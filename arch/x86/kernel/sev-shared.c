@@ -61,6 +61,7 @@ static void __noreturn sev_es_terminate(unsigned int reason)
 
 static bool sev_es_negotiate_protocol(struct sev_ghcb_protocol_info *info)
 {
+	unsigned int protocol;
 	u64 val;
 
 	/* Do the GHCB protocol version negotiation */
@@ -71,14 +72,24 @@ static bool sev_es_negotiate_protocol(struct sev_ghcb_protocol_info *info)
 	if (GHCB_MSR_INFO(val) != GHCB_MSR_SEV_INFO_RESP)
 		return false;
 
-	if (GHCB_MSR_PROTO_MAX(val) < GHCB_PROTO_OUR ||
-	    GHCB_MSR_PROTO_MIN(val) > GHCB_PROTO_OUR)
+	/* Sanity check untrusted input */
+	if (GHCB_MSR_PROTO_MIN(val) > GHCB_MSR_PROTO_MAX(val))
+		return false;
+
+	/* Use maximum supported protocol version */
+	protocol = min_t(unsigned int, GHCB_MSR_PROTO_MAX(val), GHCB_PROTOCOL_MAX);
+
+	/*
+	 * Hypervisor does not support any protocol version required for this
+	 * kernel.
+	 */
+	if (protocol < GHCB_MSR_PROTO_MIN(val))
 		return false;
 
 	if (info) {
 		info->hv_proto_min = GHCB_MSR_PROTO_MIN(val);
 		info->hv_proto_max = GHCB_MSR_PROTO_MAX(val);
-		info->vm_proto	   = GHCB_PROTO_OUR;
+		info->vm_proto	   = protocol;
 	}
 
 	return true;
