@@ -495,6 +495,9 @@ static enum es_result vc_slow_virt_to_phys(struct ghcb *ghcb, struct es_em_ctxt 
 /* Include code shared with pre-decompression boot stage */
 #include "sev-shared.c"
 
+/* Negotiated GHCB protocol version */
+static struct sev_ghcb_protocol_info ghcb_protocol_info __ro_after_init;
+
 static noinstr void __sev_put_ghcb(struct ghcb_state *state)
 {
 	struct sev_es_runtime_data *data;
@@ -665,7 +668,7 @@ static enum es_result vc_handle_msr(struct ghcb *ghcb, struct es_em_ctxt *ctxt)
 static bool __init sev_es_setup_ghcb(void)
 {
 	/* First make sure the hypervisor talks a supported protocol. */
-	if (!sev_es_negotiate_protocol())
+	if (!sev_es_negotiate_protocol(&ghcb_protocol_info))
 		return false;
 
 	/*
@@ -794,6 +797,14 @@ void __init sev_es_init_vc_handling(void)
 
 	/* Secondary CPUs use the runtime #VC handler */
 	initial_vc_handler = (unsigned long)kernel_exc_vmm_communication;
+
+	/*
+	 * Print information about supported and negotiated GHCB protocol
+	 * versions.
+	 */
+	pr_info("Hypervisor GHCB protocol version support: min=%u max=%u\n",
+		ghcb_protocol_info.hv_proto_min, ghcb_protocol_info.hv_proto_max);
+	pr_info("Using GHCB protocol version %u\n", ghcb_protocol_info.vm_proto);
 }
 
 static void __init vc_early_forward_exception(struct es_em_ctxt *ctxt)

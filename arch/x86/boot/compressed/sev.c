@@ -121,7 +121,7 @@ static enum es_result vc_read_mem(struct es_em_ctxt *ctxt,
 
 static bool early_setup_sev_es(void)
 {
-	if (!sev_es_negotiate_protocol())
+	if (!sev_es_negotiate_protocol(NULL))
 		sev_es_terminate(GHCB_SEV_ES_REASON_PROTOCOL_UNSUPPORTED);
 
 	if (set_page_decrypted((unsigned long)&boot_ghcb_page))

@@ -14,6 +14,20 @@
 #define has_cpuflag(f)	boot_cpu_has(f)
 #endif
 
+/*
+ * struct sev_ghcb_protocol_info - Used to return GHCB protocol
+ *				   negotiation details.
+ *
+ * @hv_proto_min:	Minimum GHCB protocol version supported by Hypervisor
+ * @hv_proto_max:	Maximum GHCB protocol version supported by Hypervisor
+ * @vm_proto:		Protocol version the VM (this kernel) will use
+ */
+struct sev_ghcb_protocol_info {
+	unsigned int hv_proto_min;
+	unsigned int hv_proto_max;
+	unsigned int vm_proto;
+};
+
 static bool __init sev_es_check_cpu_features(void)
 {
 	if (!has_cpuflag(X86_FEATURE_RDRAND)) {
@@ -42,7 +56,7 @@ static void __noreturn sev_es_terminate(unsigned int reason)
 		asm volatile("hlt\n" : : : "memory");
 }
 
-static bool sev_es_negotiate_protocol(void)
+static bool sev_es_negotiate_protocol(struct sev_ghcb_protocol_info *info)
 {
 	u64 val;
 
@@ -57,6 +71,12 @@ static bool sev_es_negotiate_protocol(void)
 	if (GHCB_MSR_PROTO_MAX(val) < GHCB_PROTO_OUR ||
 	    GHCB_MSR_PROTO_MIN(val) > GHCB_PROTO_OUR)
 		return false;
+
+	if (info) {
+		info->hv_proto_min = GHCB_MSR_PROTO_MIN(val);
+		info->hv_proto_max = GHCB_MSR_PROTO_MAX(val);
+		info->vm_proto	   = GHCB_PROTO_OUR;
+	}
 
 	return true;
 }
