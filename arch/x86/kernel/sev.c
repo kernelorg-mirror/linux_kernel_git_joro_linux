@@ -19,6 +19,7 @@
 #include <linux/kernel.h>
 #include <linux/mm.h>
 
+#include <asm/sev-ap-jumptable.h>
 #include <asm/cpu_entry_area.h>
 #include <asm/stacktrace.h>
 #include <asm/sev.h>
@@ -44,6 +45,9 @@ static struct ghcb __initdata *boot_ghcb;
 
 /* Cached AP Jump Table Address */
 static phys_addr_t sev_es_jump_table_pa;
+
+/* Whether the AP Jump Table blob was successfully installed */
+static bool sev_ap_jumptable_blob_installed __ro_after_init;
 
 /* #VC handler runtime per-CPU data */
 struct sev_es_runtime_data {
@@ -748,6 +752,107 @@ static void __init sev_es_setup_play_dead(void)
 #else
 static inline void sev_es_setup_play_dead(void) { }
 #endif
+
+/*
+ * This function make the necessary runtime changes to the AP Jump Table blob.
+ * For now this only sets up the GDT used while the code executes. The GDT needs
+ * to contain 16-bit code and data segments with a base that points to AP Jump
+ * Table page.
+ */
+void __init sev_es_setup_ap_jump_table_data(void *base, u32 pa)
+{
+	struct sev_ap_jump_table_header *header;
+	struct desc_ptr *gdt_descr;
+	u64 *ap_jumptable_gdt;
+
+	header = base;
+
+	/*
+	 * Setup 16-bit protected mode code and data segments for AP Jumptable.
+	 * Set the segment limits to 0xffff to already be compatible with
+	 * real-mode.
+	 */
+	ap_jumptable_gdt = (u64 *)(base + header->gdt_offset);
+	ap_jumptable_gdt[SEV_APJT_CS16 / 8] = GDT_ENTRY(0x9b, pa, 0xffff);
+	ap_jumptable_gdt[SEV_APJT_DS16 / 8] = GDT_ENTRY(0x93, pa, 0xffff);
+
+	/* Write correct GDT base address into GDT descriptor */
+	gdt_descr = (struct desc_ptr *)(base + header->gdt_offset);
+	gdt_descr->address += pa;
+}
+
+/*
+ * This function sets up the AP Jump Table blob which contains code which runs
+ * in 16-bit protected mode to park an AP. After the AP is woken up again the
+ * code will disable protected mode and jump to the reset vector which is also
+ * stored in the AP Jump Table.
+ *
+ * The Jump Table is a safe place to park an AP, because it is owned by the
+ * BIOS and writable by the OS. Putting the code in kernel memory would break
+ * with kexec, because by the time th APs wake up the memory is owned by
+ * the new kernel, and possibly already overwritten.
+ *
+ * Kexec is also the reason this function is called as an init-call after SMP
+ * bringup. Only after all CPUs are up there is a guarantee that no AP is still
+ * parked in AP jump-table code.
+ */
+static int __init sev_es_setup_ap_jump_table_blob(void)
+{
+	size_t blob_size = rm_ap_jump_table_blob_end - rm_ap_jump_table_blob;
+	u16 startup_cs, startup_ip;
+	u16 __iomem *jump_table;
+	phys_addr_t pa;
+
+	if (!sev_es_active())
+		return 0;
+
+	if (sev_get_ghcb_proto_ver() < 2) {
+		pr_info("AP Jump Table parking requires at least GHCB protocol version 2\n");
+		return 0;
+	}
+
+	pa = get_jump_table_addr();
+
+	/* Overflow and size checks for untrusted Jump Table address */
+	if (pa + PAGE_SIZE < pa || pa + PAGE_SIZE > SZ_4G) {
+		pr_info("AP Jump Table is above 4GB - not enabling AP Jump Table parking\n");
+		return 0;
+	}
+
+	/* On UP guests there is no jump table so this is not a failure */
+	if (!pa)
+		return 0;
+
+	jump_table = ioremap_encrypted(pa, PAGE_SIZE);
+	if (WARN_ON(!jump_table))
+		return -EINVAL;
+
+	/*
+	 * Safe reset vector to restore it later because the blob will
+	 * overwrite it.
+	 */
+	startup_ip = jump_table[0];
+	startup_cs = jump_table[1];
+
+	/* Install AP Jump Table Blob with real mode AP parking code */
+	memcpy_toio(jump_table, rm_ap_jump_table_blob, blob_size);
+
+	/* Setup AP Jumptable GDT */
+	sev_es_setup_ap_jump_table_data(jump_table, (u32)pa);
+
+	writew(startup_ip, &jump_table[0]);
+	writew(startup_cs, &jump_table[1]);
+
+	iounmap(jump_table);
+
+	pr_info("AP Jump Table Blob successfully set up\n");
+
+	/* Mark AP Jump Table blob as available */
+	sev_ap_jumptable_blob_installed = true;
+
+	return 0;
+}
+core_initcall(sev_es_setup_ap_jump_table_blob);
 
 static void __init alloc_runtime_data(int cpu)
 {
