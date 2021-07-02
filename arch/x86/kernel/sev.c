@@ -901,6 +901,18 @@ static int __init sev_es_setup_ap_jump_table_blob(void)
 }
 core_initcall(sev_es_setup_ap_jump_table_blob);
 
+bool sev_kexec_supported(void)
+{
+	/*
+	 * KEXEC with SEV-ES and more than one CPU is only supported
+	 * when the AP Jump Table is installed.
+	 */
+	if (num_possible_cpus() > 1)
+		return !sev_es_active() || sev_ap_jumptable_blob_installed;
+	else
+		return true;
+}
+
 static void __init alloc_runtime_data(int cpu)
 {
 	struct sev_es_runtime_data *data;

@@ -26,6 +26,7 @@
 #include <asm/kexec-bzimage64.h>
 #include <asm/setup.h>
 #include <asm/set_memory.h>
+#include <asm/sev.h>
 
 #ifdef CONFIG_ACPI
 /*
@@ -626,5 +627,8 @@ void arch_kexec_pre_free_pages(void *vaddr, unsigned int pages)
  */
 bool arch_kexec_supported(void)
 {
-	return !sev_es_active();
+	if (!sev_kexec_supported())
+		return false;
+
+	return true;
 }
