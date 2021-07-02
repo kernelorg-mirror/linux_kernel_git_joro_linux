@@ -26,24 +26,8 @@
 struct ghcb boot_ghcb_page __aligned(PAGE_SIZE);
 struct ghcb *boot_ghcb;
 
-/*
- * Copy a version of this function here - insn-eval.c can't be used in
- * pre-decompression code.
- */
-static bool insn_has_rep_prefix(struct insn *insn)
-{
-	insn_byte_t p;
-	int i;
-
-	insn_get_prefixes(insn);
-
-	for_each_insn_prefix(insn, i, p) {
-		if (p == 0xf2 || p == 0xf3)
-			return true;
-	}
-
-	return false;
-}
+#undef WARN_ONCE
+#define WARN_ONCE(condition, format...)
 
 /*
  * Only a dummy for insn_get_seg_base() - Early boot-code is 64bit only and
@@ -52,6 +36,17 @@ static bool insn_has_rep_prefix(struct insn *insn)
 static unsigned long insn_get_seg_base(struct pt_regs *regs, int seg_reg_idx)
 {
 	return 0UL;
+}
+
+/* The decompressor only uses flat segments */
+static int get_seg_base_limit(struct insn *insn, struct pt_regs *regs,
+			      int regoff, unsigned long *base,
+			      unsigned long *limit)
+{
+	if (base)
+		*base  = 0L;
+	if (limit)
+		*limit = ~0L;
 }
 
 static inline u64 sev_es_rd_ghcb_msr(void)
@@ -105,6 +100,14 @@ static enum es_result vc_read_mem(struct es_em_ctxt *ctxt,
 	return ES_OK;
 }
 
+static enum es_result vc_slow_virt_to_phys(struct ghcb *ghcb, struct es_em_ctxt *ctxt,
+					   unsigned long vaddr, phys_addr_t *paddr)
+{
+	*paddr = (phys_addr_t)vaddr;
+
+	return ES_OK;
+}
+
 #undef __init
 #undef __pa
 #define __init
@@ -115,6 +118,7 @@ static enum es_result vc_read_mem(struct es_em_ctxt *ctxt,
 /* Basic instruction decoding support needed */
 #include "../../lib/inat.c"
 #include "../../lib/insn.c"
+#include "../../lib/insn-eval-shared.c"
 
 /* Include code for early handlers */
 #include "../../kernel/sev-shared.c"
@@ -203,6 +207,9 @@ void do_boot_stage2_vc(struct pt_regs *regs, unsigned long exit_code)
 		break;
 	case SVM_EXIT_CPUID:
 		result = vc_handle_cpuid(boot_ghcb, &ctxt);
+		break;
+	case SVM_EXIT_NPF:
+		result = vc_handle_mmio(boot_ghcb, &ctxt);
 		break;
 	default:
 		result = ES_UNSUPPORTED;
