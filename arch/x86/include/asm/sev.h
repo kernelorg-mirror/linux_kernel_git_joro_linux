@@ -148,16 +148,6 @@ void snp_set_memory_private(unsigned long vaddr, unsigned int npages);
 void snp_set_wakeup_secondary_cpu(void);
 bool snp_init(struct boot_params *bp);
 void snp_abort(void);
-/*
- * TODO: These are exported only temporarily while boot/compressed/sev.c is
- * the only user. This is to avoid unused function warnings for kernel/sev.c
- * during the build of kernel proper.
- *
- * Once the code is added to consume these in kernel proper these functions
- * can be moved back to being statically-scoped to units that pull in
- * sev-shared.c via #include and these declarations can be dropped.
- */
-void __init snp_cpuid_info_create(const struct cc_blob_sev_info *cc_info);
 #else
 static inline void sev_es_ist_enter(struct pt_regs *regs) { }
 static inline void sev_es_ist_exit(void) { }

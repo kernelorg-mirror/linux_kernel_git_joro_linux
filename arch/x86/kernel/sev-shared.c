@@ -1010,7 +1010,7 @@ snp_find_cc_blob_setup_data(struct boot_params *bp)
  * mapping needs to be updated in sync with all the changes to virtual memory
  * layout and related mapping facilities throughout the boot process.
  */
-void __init snp_cpuid_info_create(const struct cc_blob_sev_info *cc_info)
+static void __init snp_cpuid_info_create(const struct cc_blob_sev_info *cc_info)
 {
 	const struct snp_cpuid_info *cpuid_info_fw, *cpuid_info;
 

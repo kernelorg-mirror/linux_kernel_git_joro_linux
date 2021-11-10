@@ -2062,6 +2062,12 @@ bool __init snp_init(struct boot_params *bp)
 	if (!cc_info)
 		return false;
 
+	snp_cpuid_info_create(cc_info);
+
+	/* SEV-SNP CPUID table is set up now. Do some sanity checks. */
+	if (!snp_cpuid_active())
+		sev_es_terminate(1, GHCB_TERM_CPUID);
+
 	/*
 	 * The CC blob will be used later to access the secrets page. Cache
 	 * it here like the boot kernel does.
@@ -2075,3 +2081,34 @@ void __init snp_abort(void)
 {
 	sev_es_terminate(1, GHCB_SNP_UNSUPPORTED);
 }
+
+/*
+ * It is useful from an auditing/testing perspective to provide an easy way
+ * for the guest owner to know that the CPUID table has been initialized as
+ * expected, but that initialization happens too early in boot to print any
+ * sort of indicator, and there's not really any other good place to do it. So
+ * do it here, and while at it, go ahead and re-verify that nothing strange has
+ * happened between early boot and now.
+ */
+static int __init snp_cpuid_check_status(void)
+{
+	const struct snp_cpuid_info *cpuid_info = snp_cpuid_info_get_ptr();
+
+	if (!cc_platform_has(CC_ATTR_SEV_SNP)) {
+		/* Firmware should not have advertised the feature. */
+		if (snp_cpuid_active())
+			panic("Invalid use of SEV-SNP CPUID table.");
+		return 0;
+	}
+
+	/* CPUID table should always be available when SEV-SNP is enabled. */
+	if (!snp_cpuid_active())
+		sev_es_terminate(1, GHCB_TERM_CPUID);
+
+	pr_info("Using SEV-SNP CPUID table, %d entries present.\n",
+		cpuid_info->count);
+
+	return 0;
+}
+
+arch_initcall(snp_cpuid_check_status);
