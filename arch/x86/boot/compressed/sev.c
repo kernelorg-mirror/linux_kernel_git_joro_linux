@@ -412,6 +412,19 @@ bool snp_init(struct boot_params *bp)
 		return false;
 
 	/*
+	 * If SEV-SNP-specific Confidential Computing blob is present, then
+	 * firmware/bootloader have indicated SEV-SNP support. Verifying this
+	 * involves CPUID checks which will be more reliable if the SEV-SNP
+	 * CPUID table is used. See comments for snp_cpuid_info_create() for
+	 * more details.
+	 */
+	snp_cpuid_info_create(cc_info);
+
+	/* SEV-SNP CPUID table should be set up now. */
+	if (!snp_cpuid_active())
+		sev_es_terminate(1, GHCB_TERM_CPUID);
+
+	/*
 	 * Pass run-time kernel a pointer to CC info via boot_params so EFI
 	 * config table doesn't need to be searched again during early startup
 	 * phase.

@@ -157,6 +157,7 @@ bool snp_init(struct boot_params *bp);
  * sev-shared.c via #include and these declarations can be dropped.
  */
 struct cc_blob_sev_info *snp_find_cc_blob_setup_data(struct boot_params *bp);
+void __init snp_cpuid_info_create(const struct cc_blob_sev_info *cc_info);
 #else
 static inline void sev_es_ist_enter(struct pt_regs *regs) { }
 static inline void sev_es_ist_exit(void) { }
