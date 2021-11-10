@@ -989,7 +989,7 @@ static struct cc_setup_data *get_cc_setup_data(struct boot_params *bp)
  * Search for a Confidential Computing blob passed in as a setup_data entry
  * via the Linux Boot Protocol.
  */
-struct cc_blob_sev_info *
+static struct cc_blob_sev_info *
 snp_find_cc_blob_setup_data(struct boot_params *bp)
 {
 	struct cc_setup_data *sd;
