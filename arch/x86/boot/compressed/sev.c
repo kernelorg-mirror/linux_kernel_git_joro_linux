@@ -305,6 +305,13 @@ static inline u64 rd_sev_status_msr(void)
 void sev_enable(struct boot_params *bp)
 {
 	unsigned int eax, ebx, ecx, edx;
+	bool snp;
+
+	/*
+	 * Setup/preliminary detection of SEV-SNP. This will be sanity-checked
+	 * against CPUID/MSR values later.
+	 */
+	snp = snp_init(bp);
 
 	/* Check for the SME/SEV support leaf */
 	eax = 0x80000000;
@@ -325,14 +332,95 @@ void sev_enable(struct boot_params *bp)
 	ecx = 0;
 	native_cpuid(&eax, &ebx, &ecx, &edx);
 	/* Check whether SEV is supported */
-	if (!(eax & BIT(1)))
+	if (!(eax & BIT(1))) {
+		if (snp)
+			error("SEV-SNP support indicated by CC blob, but not CPUID.");
 		return;
+	}
 
 	/* Check the SEV MSR whether SEV or SME is enabled */
 	sev_status   = rd_sev_status_msr();
 
 	if (!(sev_status & MSR_AMD64_SEV_ENABLED))
 		error("SEV support indicated by CPUID, but not SEV status MSR.");
+	if (snp && !(sev_status & MSR_AMD64_SEV_SNP_ENABLED))
+		error("SEV-SNP supported indicated by CC blob, but not SEV status MSR.");
 
 	sme_me_mask = 1UL << (ebx & 0x3f);
+}
+
+/* Search for Confidential Computing blob in the EFI config table. */
+static struct cc_blob_sev_info *snp_find_cc_blob_efi(struct boot_params *bp)
+{
+	struct cc_blob_sev_info *cc_info;
+	unsigned long conf_table_pa;
+	unsigned int conf_table_len;
+	bool efi_64;
+	int ret;
+
+	ret = efi_get_conf_table(bp, &conf_table_pa, &conf_table_len, &efi_64);
+	if (ret)
+		return NULL;
+
+	ret = efi_find_vendor_table(conf_table_pa, conf_table_len,
+				    EFI_CC_BLOB_GUID, efi_64,
+				    (unsigned long *)&cc_info);
+	if (ret)
+		return NULL;
+
+	return cc_info;
+}
+
+/*
+ * Initial set up of SEV-SNP relies on information provided by the
+ * Confidential Computing blob, which can be passed to the boot kernel
+ * by firmware/bootloader in the following ways:
+ *
+ * - via an entry in the EFI config table
+ * - via a setup_data structure, as defined by the Linux Boot Protocol
+ *
+ * Scan for the blob in that order.
+ */
+struct cc_blob_sev_info *snp_find_cc_blob(struct boot_params *bp)
+{
+	struct cc_blob_sev_info *cc_info;
+
+	cc_info = snp_find_cc_blob_efi(bp);
+	if (cc_info)
+		goto found_cc_info;
+
+	cc_info = snp_find_cc_blob_setup_data(bp);
+	if (!cc_info)
+		return NULL;
+
+found_cc_info:
+	if (cc_info->magic != CC_BLOB_SEV_HDR_MAGIC)
+		sev_es_terminate(0, GHCB_SNP_UNSUPPORTED);
+
+	return cc_info;
+}
+
+bool snp_init(struct boot_params *bp)
+{
+	struct cc_blob_sev_info *cc_info;
+
+	if (!bp)
+		return false;
+
+	cc_info = snp_find_cc_blob(bp);
+	if (!cc_info)
+		return false;
+
+	/*
+	 * Pass run-time kernel a pointer to CC info via boot_params so EFI
+	 * config table doesn't need to be searched again during early startup
+	 * phase.
+	 */
+	bp->cc_blob_address = (u32)(unsigned long)cc_info;
+
+	/*
+	 * Indicate SEV-SNP based on presence of SEV-SNP-specific CC blob.
+	 * Subsequent checks will verify SEV-SNP CPUID/MSR bits.
+	 */
+	return true;
 }
