@@ -59,6 +59,7 @@
 #include <asm/cpu_device_id.h>
 #include <asm/uv/uv.h>
 #include <asm/sigframe.h>
+#include <asm/sev.h>
 
 #include "cpu.h"
 
@@ -1976,6 +1977,10 @@ void cpu_init_exception_handling(void)
 	set_tss_desc(cpu, &get_cpu_entry_area(cpu)->tss.x86_tss);
 
 	load_TR_desc();
+
+	/* Register the GHCB before taking any VC exception */
+	if (IS_ENABLED(CONFIG_AMD_MEM_ENCRYPT))
+		sev_snp_register_ghcb();
 
 	/* Finally load the IDT */
 	load_current_idt();
