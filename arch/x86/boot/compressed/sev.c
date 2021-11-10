@@ -204,3 +204,48 @@ finish:
 	else if (result != ES_RETRY)
 		sev_es_terminate(GHCB_SEV_ES_REASON_GENERAL_REQUEST);
 }
+
+static inline u64 rd_sev_status_msr(void)
+{
+	unsigned long low, high;
+
+	asm volatile("rdmsr" : "=a" (low), "=d" (high) :
+			"c" (MSR_AMD64_SEV));
+
+	return ((high << 32) | low);
+}
+
+void sev_enable(struct boot_params *bp)
+{
+	unsigned int eax, ebx, ecx, edx;
+
+	/* Check for the SME/SEV support leaf */
+	eax = 0x80000000;
+	ecx = 0;
+	native_cpuid(&eax, &ebx, &ecx, &edx);
+	if (eax < 0x8000001f)
+		return;
+
+	/*
+	 * Check for the SME/SEV feature:
+	 *   CPUID Fn8000_001F[EAX]
+	 *   - Bit 0 - Secure Memory Encryption support
+	 *   - Bit 1 - Secure Encrypted Virtualization support
+	 *   CPUID Fn8000_001F[EBX]
+	 *   - Bits 5:0 - Pagetable bit position used to indicate encryption
+	 */
+	eax = 0x8000001f;
+	ecx = 0;
+	native_cpuid(&eax, &ebx, &ecx, &edx);
+	/* Check whether SEV is supported */
+	if (!(eax & BIT(1)))
+		return;
+
+	/* Check the SEV MSR whether SEV or SME is enabled */
+	sev_status   = rd_sev_status_msr();
+
+	if (!(sev_status & MSR_AMD64_SEV_ENABLED))
+		error("SEV support indicated by CPUID, but not SEV status MSR.");
+
+	sme_me_mask = 1UL << (ebx & 0x3f);
+}
