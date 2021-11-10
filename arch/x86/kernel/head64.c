@@ -163,9 +163,6 @@ unsigned long __head __startup_64(unsigned long physaddr,
 	if (load_delta & ~PMD_PAGE_MASK)
 		for (;;);
 
-	/* Activate Secure Memory Encryption (SME) if supported and enabled */
-	sme_enable(bp);
-
 	/* Include the SME encryption mask in the fixup value */
 	load_delta += sme_get_me_mask();
 
@@ -594,7 +591,7 @@ void early_setup_idt(void)
 /*
  * Setup boot CPU state needed before kernel switches to virtual addresses.
  */
-void __head startup_64_setup_env(unsigned long physbase)
+void __head startup_64_setup_env(unsigned long physbase, struct boot_params *bp)
 {
 	/* Load GDT */
 	startup_gdt_descr.address = (unsigned long)fixup_pointer(startup_gdt, physbase);
@@ -606,4 +603,7 @@ void __head startup_64_setup_env(unsigned long physbase)
 		     "movl %%eax, %%es\n" : : "a"(__KERNEL_DS) : "memory");
 
 	startup_64_load_idt(physbase);
+
+	/* Activate SEV/SME memory encryption if supported/enabled. */
+	sme_enable(bp);
 }
